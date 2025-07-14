@@ -53,3 +53,4 @@ type AppviewxCreateCertResponse struct {
 
 var CreateCertificateActionId = "certificate/create"
 var HTTPMethodPost = "POST"
+var HTTPMethodGet = "GET"

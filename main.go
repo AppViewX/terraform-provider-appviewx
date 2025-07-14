@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	version     string = "1.0.3"
-	releaseDate string = "April 10 2025"
-	description string = "Terraform Documentation Changes"
+	version     string = "1.0.4"
+	releaseDate string = "July 14 2025"
+	description string = "Custom Create Certificate and Push to AKV"
 )
 
 func init() {

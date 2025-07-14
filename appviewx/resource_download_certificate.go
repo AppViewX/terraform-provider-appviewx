@@ -98,6 +98,7 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 	commonName := resourceData.Get(constants.COMMON_NAME).(string)
 	serialNumber := resourceData.Get(constants.SERIAL_NUMBER).(string)
 	var downloadPath, downloadFormat, downloadPassword string
+	log.Println("[INFO] CommonName =================================================================== ", commonName)
 	var isChainRequired, ok bool
 	downloadFormat = GetDownloadFormat(resourceData)
 	downloadPath = GetDownloadFilePath(resourceData, commonName, downloadFormat)

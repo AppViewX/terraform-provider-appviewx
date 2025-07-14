@@ -30,16 +30,19 @@ func ResourceAutomationServer() *schema.Resource {
 				Required: true,
 			},
 			constants.PAYLOAD: {
-				Type:     schema.TypeString,
-				Optional: true,
+				Type:      schema.TypeString,
+				Optional:  true,
+				Sensitive: true,
 			},
 			constants.HEADERS: {
-				Type:     schema.TypeMap,
-				Optional: true,
+				Type:      schema.TypeMap,
+				Optional:  true,
+				Sensitive: true,
 			},
 			constants.MASTER_PAYLOAD: {
-				Type:     schema.TypeString,
-				Optional: true,
+				Type:      schema.TypeString,
+				Optional:  true,
+				Sensitive: true,
 			},
 			constants.QUERY_PARAMS: {
 				Type:     schema.TypeMap,
@@ -71,28 +74,45 @@ func resourceAutomationServerDelete(d *schema.ResourceData, m interface{}) error
 	return nil
 }
 
-// TODO: cleanup to be done
 func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error {
-
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
+
+	d.Partial(true)
 
 	log.Println("[DEBUG] *********************** Request received to create")
 	appviewxUserName := configAppViewXEnvironment.AppViewXUserName
 	appviewxPassword := configAppViewXEnvironment.AppViewXPassword
+	appviewxClientId := configAppViewXEnvironment.AppViewXClientId
+	appviewxClientSecret := configAppViewXEnvironment.AppViewXClientSecret
 	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
 	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
 	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
 	appviewxGwSource := "WEB"
 
-	appviewxSessionID, err := GetSession(appviewxUserName,
-		appviewxPassword,
-		appviewxEnvironmentIP,
-		appviewxEnvironmentPort,
-		appviewxGwSource,
-		appviewxEnvironmentIsHTTPS)
-	if err != nil {
-		log.Println("[ERROR] Error in getting the session : ", err)
-		return err
+	var appviewxSessionID, accessToken string
+	var err error
+
+	// Try username/password authentication first
+	if appviewxUserName != "" && appviewxPassword != "" {
+		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			log.Println("[ERROR] Error in getting the session due to : ", err)
+			// Don't return error here, try client ID/secret authentication
+		}
+	}
+
+	// If username/password authentication failed or wasn't provided, try client ID/secret
+	if appviewxSessionID == "" && appviewxClientId != "" && appviewxClientSecret != "" {
+		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			log.Println("[ERROR] Error in getting the access token due to : ", err)
+			return err
+		}
+	}
+
+	// If both authentication methods failed, return error
+	if appviewxSessionID == "" && accessToken == "" {
+		return errors.New("authentication failed - provide either username/password or client ID/secret in Terraform File or in the Environment Variables:[APPVIEWX_TERRAFORM_CLIENT_ID, APPVIEWX_TERRAFORM_CLIENT_SECRET]")
 	}
 
 	types := constants.POST
@@ -100,8 +120,10 @@ func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error
 	actionID := d.Get(constants.APPVIEWX_ACTION_ID).(string)
 	payloadString := d.Get(constants.PAYLOAD).(string)
 
-	var masterPayloadFileName = d.Get(constants.MASTER_PAYLOAD).(string)
-	if d.Get(constants.MASTER_PAYLOAD) == "" {
+	var masterPayloadFileName string
+	if v, ok := d.GetOk(constants.MASTER_PAYLOAD); ok {
+		masterPayloadFileName = v.(string)
+	} else {
 		masterPayloadFileName = "./payload.json"
 	}
 
@@ -120,20 +142,28 @@ func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error
 	queryParams := make(map[string]string)
 	queryParams[constants.GW_SOURCE] = appviewxGwSource
 
-	var queryParamReceived = d.Get(constants.QUERY_PARAMS).(map[string]interface{})
-	for k, v := range queryParamReceived {
-		queryParams[k] = v.(string)
+	var queryParamReceived map[string]interface{}
+	if v, ok := d.GetOk(constants.QUERY_PARAMS); ok {
+		queryParamReceived = v.(map[string]interface{})
+		for k, v := range queryParamReceived {
+			queryParams[k] = v.(string)
+		}
 	}
 
 	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, actionID, queryParams, appviewxEnvironmentIsHTTPS)
 
-	var headers = d.Get(constants.HEADERS).(map[string]interface{})
+	headers := make(map[string]interface{})
+	if v, ok := d.GetOk(constants.HEADERS); ok {
+		headers = v.(map[string]interface{})
+	}
+
 	if len(headers) == 0 {
 		headers["Content-Type"] = "application/json"
 		headers["Accept"] = "application/json"
 	}
 
 	client := &http.Client{Transport: HTTPTransport()}
+	masterPayload[constants.APPVIEWX_ACTION_ID] = actionID
 	requestBody, err := json.Marshal(masterPayload)
 	if err != nil {
 		log.Println("[ERROR] error in Marshalling the masterPayload", masterPayload, err)
@@ -153,7 +183,19 @@ func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error
 		key1 := fmt.Sprintf("%v", key)
 		req.Header.Add(key1, value1)
 	}
-	req.Header.Add(constants.SESSION_ID, appviewxSessionID)
+
+	// Add appropriate authentication header
+	if appviewxSessionID != "" {
+		log.Printf("[DEBUG] Using session ID for authentication")
+		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
+	} else if accessToken != "" {
+		log.Printf("[DEBUG] Using access token for authentication")
+		req.Header.Set(constants.TOKEN, accessToken)
+	}
+
+	// Debug headers (already a map, so just print as is)
+	// headersBytes, _ := json.MarshalIndent(req.Header, "", "  ")
+	// log.Println("[DEBUG] 🏷️  Request headers:\n", string(headersBytes))
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -165,11 +207,18 @@ func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("[ERROR] error in Reading the body", err)
+		log.Println("\n[ERROR] ❌ Error in reading the response body:")
+		log.Println("   ", err)
+		log.Println("--------------------------------------------------------------\n")
 		return err
 	}
 
-	downloadFilePath := d.Get(constants.DOWNLOAD_FILE_PATH).(string)
+	// Safely access the download path
+	var downloadFilePath string
+	if v, ok := d.GetOk(constants.CERTIFICATE_DOWNLOAD_PATH); ok {
+		downloadFilePath = v.(string)
+	}
+
 	if downloadFilePath != "" {
 		log.Println("downloadFilePath : ", downloadFilePath)
 		err = ioutil.WriteFile(downloadFilePath, body, 0777)
@@ -181,9 +230,16 @@ func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error
 		log.Println("[DEBUG] downloadFilePath is empty")
 	}
 
-	log.Println(string(body))
+	// Pretty print response body if JSON
+	var prettyResp bytes.Buffer
+	if json.Indent(&prettyResp, body, "", "  ") == nil {
+		log.Println("\n[DEBUG] 📦 Response body:\n", prettyResp.String())
+	} else {
+		log.Println("\n[DEBUG] 📦 Response body (raw):\n", string(body))
+	}
 
-	log.Println("[DEBUG] API ionvoke success")
+	log.Println("[DEBUG] API invoke success")
 	d.SetId(strconv.Itoa(rand.Int()))
+
 	return resourceAutomationServerRead(d, m)
 }
