@@ -41,7 +41,7 @@ The `appviewx_search_certificate` resource allows you to search for certificates
 ```hcl
 resource "appviewx_search_certificate_by_keyword" "search_cert" {
   category        = "Server"
-  cert_serial_no  = "<Serial Number>"
+  cert_serial_no  = "<Certificate Serial Number>"
   cert_issuer     = "<Issuer Common Name>"
 }
 ```
@@ -56,8 +56,8 @@ provider "appviewx" {
 }
 
 resource "appviewx_revoke_certificate" "cert_revoke" {
-  serial_number = "74:00:00:0A:BD:5E:FD:73:A6:A3:8D:C7:A6:00:00:00:00:0A:BD"
-  issuer_common_name = "AppViewX Intermediate CA"
+  serial_number = "<Certificate Serial Number>"
+  issuer_common_name = "AppViewX CA"
   reason = "Superseded"
   comments = "Certificate replaced"
 }
@@ -77,5 +77,18 @@ To import an existing search into the Terraform state, use:
 terraform import appviewx_search_certificate_by_keyword.search_cert <search_id>
 ```
 Replace `<search_id>` with the unique identifier for your search (typically based on the category).
+
+---
+
+## Destroy
+
+To destroy the Certificate details in the Terraform State file, use:
+
+```bash
+terraform destroy
+```
+
+- This is mainly to ensure that certificates (or any cryptographic material) are not stored in the Terraform state file.
+- This feature is crucial for maintaining the security and confidentiality of sensitive cryptographic materials.
 
 ---

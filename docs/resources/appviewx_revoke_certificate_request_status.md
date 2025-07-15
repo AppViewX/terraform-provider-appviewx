@@ -50,3 +50,16 @@ terraform import appviewx_revoke_certificate_request_status.revoke_status <reque
 Replace `<request_id>` with the actual workflow request ID.
 
 ---
+
+## Destroy
+
+To destroy the Certificate details in the Terraform State file, use:
+
+```bash
+terraform destroy
+```
+
+- This is mainly to ensure that certificates (or any cryptographic material) are not stored in the Terraform state file.
+- This feature is crucial for maintaining the security and confidentiality of sensitive cryptographic materials.
+
+---

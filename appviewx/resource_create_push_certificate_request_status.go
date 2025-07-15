@@ -140,12 +140,6 @@ func CreatePushCertificateRequestStatus() *schema.Resource {
 				Default:     false,
 				Description: "Whether to download the certificate after workflow completion",
 			},
-			"certificate_download_password": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "Password for the downloaded certificate (if applicable)",
-				Sensitive:   true,
-			},
 			"certificate_download_path": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -199,6 +193,7 @@ func createPushCertificateRequestStatusRead(d *schema.ResourceData, m interface{
 func createPushCertificateRequestStatusDelete(d *schema.ResourceData, m interface{}) error {
 	logger.Info(" **************** DELETE OPERATION FOR WORKFLOW LOGS **************** ")
 	// Since this is a read-only resource, deletion just removes it from state
+	d.SetId("")
 	return nil
 }
 
@@ -1179,14 +1174,14 @@ func downloadCertificateIfRequired(resourceId string, d *schema.ResourceData, m 
 
 	logger.Info(" Downloading certificate to: %s", fullDownloadPath)
 	// Get certificate download password if required
-	certDownloadPassword := d.Get("certificate_download_password").(string)
+	// certDownloadPassword := d.Get("certificate_download_password").(string)
 	// Download certificate
 	downloadSuccess := downloadCertificateFromAppviewx(
 		resourceId,
 		certCommonName,
 		"",
 		downloadFormat,
-		certDownloadPassword,
+		"",
 		fullDownloadPath,
 		certificateChainRequired,
 		appviewxSessionID,

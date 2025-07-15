@@ -77,8 +77,8 @@ provider "appviewx" {
 }
 
 resource "appviewx_revoke_certificate" "cert_revoke" {
-  serial_number = "74:00:00:0A:BD:5E:FD:73:A6:A3:8D:C7:A6:00:00:00:00:0A:BD"
-  issuer_common_name = "AppViewX Intermediate CA"
+  serial_number = "<Certificate Serial Number>"
+  issuer_common_name = "AppViewX CA"
   reason = "Superseded"
   comments = "Certificate replaced"
 }
@@ -98,5 +98,18 @@ To import an existing revocation request into the Terraform state, use:
 terraform import appviewx_revoke_certificate.revoke_cert <request_id>
 ```
 Replace `<request_id>` with the actual request ID of the revocation.
+
+---
+
+## Destroy
+
+To destroy the Certificate details in the Terraform State file, use:
+
+```bash
+terraform destroy
+```
+
+- This is mainly to ensure that certificates (or any cryptographic material) are not stored in the Terraform state file.
+- This feature is crucial for maintaining the security and confidentiality of sensitive cryptographic materials.
 
 ---

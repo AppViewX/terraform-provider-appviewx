@@ -196,9 +196,9 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
     "entrust_cert_type": "NA",
     "sectigo_cert_type": "NA",
     "template_name": "NA",
-    "digicert_division": "AppViewX Inc.",
-    "digicert_cert_type": "Standard SSL",
-    "digicert_server_type": "Apache",
+    "digicert_division": "AppViewX",
+    "digicert_cert_type": "SSL",
+    "digicert_server_type": "Server1",
     "digicert_payment_method": "balance",
     "validity_unit": "Days",
     "validity_unit_value": "365",
@@ -257,7 +257,7 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
     "ca": "Microsoft Enterprise",
     "entrust_cert_type": "NA",
     "sectigo_cert_type": "NA",
-    "template_name": "WebServer",
+    "template_name": "Server",
     "digicert_division": "NA",
     "digicert_cert_type": "NA",
     "digicert_server_type": "NA",
@@ -319,7 +319,7 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
     "cert_type": "Server",
     "ca": "Sectigo",
     "entrust_cert_type": "NA",
-    "sectigo_cert_type": "EliteSSL Certificate",
+    "sectigo_cert_type": "SSL Certificate",
     "template_name": "NA",
     "digicert_division": "NA",
     "digicert_cert_type": "NA",
@@ -378,5 +378,18 @@ To import an existing workflow request into the Terraform state, use:
 terraform import appviewx_certificate_push_akv.create_and_push_certificate <workflow_id>
 ```
 Replace `<workflow_id>` with the actual workflow request ID.
+
+---
+
+## Destroy
+
+To destroy the Certificate details in the Terraform State file, use:
+
+```bash
+terraform destroy
+```
+
+- This is mainly to ensure that certificates (or any cryptographic material) are not stored in the Terraform state file.
+- This feature is crucial for maintaining the security and confidentiality of sensitive cryptographic materials.
 
 ---

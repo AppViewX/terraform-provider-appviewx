@@ -43,10 +43,7 @@ The `appviewx_create_push_certificate_request_status` resource is used to poll t
   Path to download the certificate.
 
 - **`certificate_download_format`** (string):  
-  Format for the downloaded certificate. Possible values are [PEM, CER, CRT, DER, P12, PFX].
-
-- **`certificate_download_password`** (string):  
-  Password for the downloaded certificate (if applicable).
+  Format for the downloaded certificate. Possible values are [PEM, CER, CRT, DER].
 
 - **`certificate_chain_required`** (bool):  
   Whether to include the certificate chain in the download (default: true).
@@ -61,7 +58,6 @@ resource "appviewx_create_push_certificate_request_status" "create_and_push_cert
   certificate_common_name = "<Common Name of the Certificate>"
   certificate_download_path = "</path/to/directory or /path/to/directory/filename>"
   certificate_download_format = "CRT"
-  certificate_download_password = "password"
   certificate_chain_required = true
   is_download_required = true
 }
@@ -75,5 +71,18 @@ To import an existing workflow status into the Terraform state, use:
 terraform import appviewx_create_push_certificate_request_status.create_and_push_certificate_status <workflow_id>
 ```
 Replace `<workflow_id>` with the actual workflow request ID.
+
+---
+
+## Destroy
+
+To destroy the Certificate details in the Terraform State file, use:
+
+```bash
+terraform destroy
+```
+
+- This is mainly to ensure that certificates (or any cryptographic material) are not stored in the Terraform state file.
+- This feature is crucial for maintaining the security and confidentiality of sensitive cryptographic materials.
 
 ---
