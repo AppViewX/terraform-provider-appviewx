@@ -27,7 +27,7 @@ AppViewX Terraform Provider allows you to manage certificates using the AppViewX
 ```hcl
 provider "appviewx" {
     appviewx_username="username"
-	appviewx_password="password"
+    appviewx_password="password"
     appviewx_client_id="clientid"
     appviewx_client_secret="clientsecret"
     appviewx_environment_is_https=true
