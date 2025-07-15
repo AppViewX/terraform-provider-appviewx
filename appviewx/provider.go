@@ -2,9 +2,11 @@ package appviewx
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
+	"terraform-provider-appviewx/appviewx/logger"
 )
 
 func Provider() *schema.Provider {
@@ -13,11 +15,15 @@ func Provider() *schema.Provider {
 			constants.APPVIEWX_USERNAME: {
 				Type:      schema.TypeString,
 				Optional:  true,
+				DefaultFunc: schema.EnvDefaultFunc("APPVIEWX_TERRAFORM_USERNAME", nil),
+				Description: "AppViewX Username",
 				Sensitive: true,
 			},
 			constants.APPVIEWX_PASSWORD: {
 				Type:      schema.TypeString,
 				Optional:  true,
+				DefaultFunc: schema.EnvDefaultFunc("APPVIEWX_TERRAFORM_PASSWORD", nil),
+				Description: "AppViewX Password",
 				Sensitive: true,
 			},
 			constants.APPVIEWX_CLIENT_ID: {
@@ -46,6 +52,15 @@ func Provider() *schema.Provider {
 				Type:     schema.TypeBool,
 				Required: true,
 			},
+			constants.LOG_LEVEL: {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "INFO",
+				Description: "Log level (DEBUG, INFO)",
+				ValidateFunc: validation.StringInSlice([]string{
+                    "DEBUG", "INFO",
+                }, false),
+            },
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"appviewx_automation":                             ResourceAutomationServer(),
@@ -71,5 +86,9 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		AppViewXEnvironmentPort: d.Get(constants.APPVIEWX_ENVIRONMENT_PORT).(string),
 		AppViewXIsHTTPS:         d.Get(constants.APPVIEWX_ENVIRONMENT_Is_HTTPS).(bool),
 	}
+
+	logLevel := d.Get("log_level").(string)
+    logger.SetLevel(logLevel)
+    logger.Info("AppViewX Provider initialized with log level: %s", logLevel)
 	return &appviewxEnvironment, nil
 }

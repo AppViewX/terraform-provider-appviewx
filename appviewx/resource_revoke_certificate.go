@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -16,6 +15,7 @@ import (
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
+	"terraform-provider-appviewx/appviewx/logger"
 )
 
 func ResourceRevokeCertificate() *schema.Resource {
@@ -84,9 +84,9 @@ func ResourceRevokeCertificate() *schema.Resource {
 }
 
 func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n====================[CERTIFICATE REVOCATION]====================")
-	log.Println("  🚀  Resource Revoke Certificate Create")
-	log.Println("======================================================================\n")
+	logger.Info("\n====================[CERTIFICATE REVOCATION]====================")
+	logger.Info("  🚀  Resource Revoke Certificate Create")
+	logger.Info("======================================================================\n")
 
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
 
@@ -107,24 +107,24 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 	if appviewxUserName != "" && appviewxPassword != "" {
 		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Error in getting the session:")
-			log.Println("   ", err)
-			log.Println("----------------------------------------------------------------------\n")
+			logger.Error("Error in getting the session:")
+			logger.Error("   ", err)
+			logger.Error("----------------------------------------------------------------------")
 			return diag.FromErr(err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
 		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Error in getting the access token:")
-			log.Println("   ", err)
-			log.Println("----------------------------------------------------------------------\n")
+			logger.Error("❌ Error in getting the access token:")
+			logger.Error("   ", err)
+			logger.Error("----------------------------------------------------------------------")
 			return diag.FromErr(err)
 		}
 	}
 
 	// If both authentication methods failed, return error
 	if appviewxSessionID == "" && accessToken == "" {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Authentication failed - provide either username/password or client ID/secret in Terraform File or in the Environment Variables:[APPVIEWX_TERRAFORM_CLIENT_ID, APPVIEWX_TERRAFORM_CLIENT_SECRET]\n")
+		logger.Error("❌ Authentication failed - provide either username/password or client ID/secret in Terraform File or in the Environment Variables:[APPVIEWX_TERRAFORM_CLIENT_ID, APPVIEWX_TERRAFORM_CLIENT_SECRET]")
 		return diag.FromErr(errors.New("authentication failed - provide either username/password or client ID/secret in Terraform File or in the Environment Variables:[APPVIEWX_TERRAFORM_CLIENT_ID, APPVIEWX_TERRAFORM_CLIENT_SECRET]"))
 	}
 
@@ -132,25 +132,25 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 	serialNumber := d.Get("serial_number").(string)
 	issuerCommonName := d.Get("issuer_common_name").(string)
 
-	log.Printf("\n[CERTIFICATE REVOCATION][INFO] 🔍 Looking up certificate with serial: %s and issuer: %s\n", serialNumber, issuerCommonName)
+	logger.Info("🔍 Looking up certificate with serial: %s and issuer: %s", serialNumber, issuerCommonName)
 
 	// Step 1: Call the execute-hook API to get resource ID
 	resourceId, err := getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxEnvironmentIsHTTPS, appviewxSessionID, accessToken, serialNumber, issuerCommonName)
 	if err != nil {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Error retrieving resource ID:")
-		log.Println("   ", err)
-		log.Println("----------------------------------------------------------------------\n")
+		logger.Error("❌ Error retrieving resource ID:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
 		return diag.FromErr(err)
 	}
 
 	// Save the resource ID in the state
 	d.Set("resource_id", resourceId)
-	log.Printf("\n[CERTIFICATE REVOCATION][INFO] 🔄 Found certificate with resource ID: %s\n", resourceId)
+	logger.Info("🔄 Found certificate with resource ID: %s", resourceId)
 
 	// Step 2: Revoke certificate using the resource ID
 	// Prepare revocation request
 	reason := d.Get("reason").(string)
-	log.Printf("[CERTIFICATE REVOCATION][INFO] 📝 Revocation reason: %s\n", reason)
+	logger.Info("📝 Revocation reason: %s", reason)
 
 	// Build revocation payload
 	payload := map[string]interface{}{
@@ -161,7 +161,7 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 	// Add comments if provided
 	if comments, ok := d.GetOk("comments"); ok {
 		payload["comments"] = comments.(string)
-		log.Printf("[CERTIFICATE REVOCATION][INFO] 💬 Revocation comments: %s\n", comments.(string))
+		logger.Info("💬 Revocation comments: %s", comments.(string))
 	}
 
 	// Set query parameters
@@ -171,21 +171,21 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 
 	// Get URL for the revoke endpoint
 	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "certificate/revoke", queryParams, appviewxEnvironmentIsHTTPS)
-	log.Printf("\n[CERTIFICATE REVOCATION][DEBUG] 🌐 Revoking certificate using URL: %s\n", url)
+	logger.Debug("🌐 Revoking certificate using URL: %s", url)
 
 	// Prepare the request
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Error in marshalling the payload:")
-		log.Println("   ", err)
-		log.Printf("   Payload: %+v\n", payload)
-		log.Println("----------------------------------------------------------------------\n")
+		logger.Error("❌ Error in marshalling the payload:")
+		logger.Error("   ", err)
+		logger.Error("   Payload: %+v\n", payload)
+		logger.Error("----------------------------------------------------------------------\n")
 		return diag.FromErr(err)
 	}
 
 	// Log the request for debugging
 	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
-	log.Printf("\n[CERTIFICATE REVOCATION][DEBUG] 📝 Revocation payload:\n%s\n", string(payloadBytes))
+	logger.Debug("📝 Revocation payload:\n%s\n", string(payloadBytes))
 
 	// Create HTTP client
 	client := &http.Client{Transport: HTTPTransport()}
@@ -193,9 +193,9 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 	// Create request
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Error in creating new request:")
-		log.Println("   ", err)
-		log.Println("----------------------------------------------------------------------\n")
+		logger.Error("❌ Error in creating new request:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
 		return diag.FromErr(err)
 	}
 
@@ -205,10 +205,10 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 
 	// Add authentication header
 	if appviewxSessionID != "" {
-		log.Printf("[CERTIFICATE REVOCATION][DEBUG] 🔑 Using session ID for authentication")
+		logger.Debug("🔑 Using session ID for authentication")
 		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
 	} else if accessToken != "" {
-		log.Printf("[CERTIFICATE REVOCATION][DEBUG] 🔑 Using access token for authentication\n")
+		logger.Debug("🔑 Using access token for authentication")
 		req.Header.Set(constants.TOKEN, accessToken)
 	}
 
@@ -217,33 +217,33 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 	// log.Printf("[CERTIFICATE REVOCATION][DEBUG] 🏷️ Request headers:\n%s\n", string(headersBytes))
 
 	// Make the request
-	log.Printf("[CERTIFICATE REVOCATION][INFO] 📤 Sending revocation request...\n")
+	logger.Info("📤 Sending revocation request...")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Error in revoking certificate:")
-		log.Println("   ", err)
-		log.Println("----------------------------------------------------------------------\n")
+		logger.Error("❌ Error in revoking certificate:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
 		return diag.FromErr(err)
 	}
 	defer resp.Body.Close()
 
-	log.Printf("[CERTIFICATE REVOCATION][INFO] 📊 Certificate revocation response status code: %s\n", resp.Status)
+	logger.Info("📊 Certificate revocation response status code: %s", resp.Status)
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Unable to read response body:")
-		log.Println("   ", err)
-		log.Println("----------------------------------------------------------------------\n")
+		logger.Error("❌ Unable to read response body:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
 		return diag.FromErr(err)
 	}
 
 	// Format and log JSON response for better readability
 	var prettyJSON bytes.Buffer
 	if err := json.Indent(&prettyJSON, responseBody, "", "  "); err != nil {
-		log.Printf("\n[CERTIFICATE REVOCATION][DEBUG] 📦 Revocation response body (raw):\n%s\n", string(responseBody))
+		logger.Info("📦 Revocation response body (raw):\n%s\n", string(responseBody))
 	} else {
-		log.Printf("\n[CERTIFICATE REVOCATION][DEBUG] 📦 Revocation response body (formatted JSON):\n%s\n", prettyJSON.String())
+		logger.Info("📦 Revocation response body:\n%s\n", prettyJSON.String())
 	}
 
 	// Store response status
@@ -256,12 +256,12 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 		if response, ok := responseObj["response"].(map[string]interface{}); ok {
 			if message, ok := response["message"].(string); ok {
 				d.Set("response_message", message)
-				log.Printf("[CERTIFICATE REVOCATION][INFO] 💬 Response message: %s\n", message)
+				logger.Info("💬 Response message: %s", message)
 			}
 			if reqId, ok := response["requestId"].(string); ok && reqId != "" {
 				requestId = reqId
 				d.Set("request_id", requestId)
-				log.Printf("[CERTIFICATE REVOCATION][INFO] 🔑 Found request ID: %s\n", requestId)
+				logger.Info("🔑 Found request ID: %s", requestId)
 			}
 		}
 	}
@@ -272,27 +272,27 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 
 	// Check for error responses
 	if !revocationSuccess {
-		log.Println("\n[CERTIFICATE REVOCATION][ERROR] ❌ Revocation failed:")
-		log.Printf("   Status: %s\n", resp.Status)
-		log.Println("   Response:", string(responseBody))
-		log.Println("----------------------------------------------------------------------\n")
+		logger.Error("❌ Revocation failed:")
+		logger.Error("   Status: %s", resp.Status)
+		logger.Error("   Response:", string(responseBody))
+		logger.Error("----------------------------------------------------------------------")
 		// We don't return an error here because we want to keep the resource info in state
 		// even if revocation failed - this allows users to see what went wrong
 	} else {
-		log.Printf("\n[CERTIFICATE REVOCATION][INFO] ✅ Certificate with resource ID %s successfully revoked\n", resourceId)
+		logger.Info("✅ Certificate with resource ID %s successfully revoked", resourceId)
 	}
 
 	// Set ID to resourceId to track this resource
 	if requestId != "" {
 		d.SetId(requestId)
-		log.Printf("[CERTIFICATE REVOCATION][INFO] 📝 Setting resource ID to request ID: %s\n", requestId)
+		logger.Info("📝 Setting resource ID to request ID: %s", requestId)
 	} else {
 		d.SetId(resourceId)
-		log.Printf("[CERTIFICATE REVOCATION][INFO] 📝 Request ID not found, setting resource ID to original resource ID: %s\n", resourceId)
+		logger.Info("📝 Request ID not found, setting resource ID to original resource ID: %s", resourceId)
 	}
 
-	log.Println("\n[CERTIFICATE REVOCATION][INFO] ✅ Revocation process complete")
-	log.Println("======================================================================\n")
+	logger.Info("✅ Revocation process complete")
+	logger.Info("======================================================================")
 
 	return nil
 }
@@ -319,7 +319,7 @@ func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPo
 
 	// Get URL for execute-hook API
 	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "execute-hook", queryParams, appviewxEnvironmentIsHTTPS)
-	log.Printf("\n[CERTIFICATE LOOKUP][DEBUG] 🌐 Looking up resource ID using URL: %s\n", url)
+	logger.Debug("🌐 Looking up resource ID using URL: %s", url)
 
 	// Prepare the request
 	requestBody, err := json.Marshal(payload)
@@ -329,7 +329,7 @@ func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPo
 
 	// Log the request for debugging
 	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
-	log.Printf("\n[CERTIFICATE LOOKUP][DEBUG] 📝 Resource ID lookup payload:\n%s\n", string(payloadBytes))
+	logger.Debug("📝 Resource ID lookup payload:\n%s\n", string(payloadBytes))
 
 	// Create HTTP client
 	client := &http.Client{Transport: HTTPTransport()}
@@ -346,15 +346,15 @@ func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPo
 
 	// Add authentication header
 	if appviewxSessionID != "" {
-		log.Printf("[CERTIFICATE LOOKUP][DEBUG] 🔑 Using session ID for authentication")
+		logger.Debug("🔑 Using session ID for authentication")
 		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
 	} else if accessToken != "" {
-		log.Printf("[CERTIFICATE LOOKUP][DEBUG] 🔑 Using access token for authentication\n")
+		logger.Debug("🔑 Using access token for authentication")
 		req.Header.Set(constants.TOKEN, accessToken)
 	}
 
 	// Make the request
-	log.Printf("[CERTIFICATE LOOKUP][INFO] 📤 Sending resource ID lookup request...\n")
+	logger.Info("📤 Sending resource ID lookup request...")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("error making HTTP request: %v", err)
@@ -370,9 +370,9 @@ func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPo
 	// Format and log JSON response for debugging
 	var prettyJSON bytes.Buffer
 	if err := json.Indent(&prettyJSON, responseBody, "", "  "); err == nil {
-		log.Printf("\n[CERTIFICATE LOOKUP][DEBUG] 📦 Resource ID lookup response:\n%s\n", prettyJSON.String())
+		logger.Debug("📦 Resource ID lookup response:\n%s\n", prettyJSON.String())
 	} else {
-		log.Printf("\n[CERTIFICATE LOOKUP][DEBUG] 📦 Resource ID lookup response (raw):\n%s\n", string(responseBody))
+		logger.Debug("📦 Resource ID lookup response (raw):\n%s\n", string(responseBody))
 	}
 
 	// Parse response to extract resource ID
@@ -387,7 +387,7 @@ func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPo
 		if output, ok := resp["output"].([]interface{}); ok && len(output) > 0 {
 			if firstOutput, ok := output[0].(map[string]interface{}); ok {
 				if resourceId, ok := firstOutput["_id"].(string); ok && resourceId != "" {
-					log.Printf("[CERTIFICATE LOOKUP][INFO] ✅ Found resource ID: %s\n", resourceId)
+					logger.Info("✅ Found resource ID: %s", resourceId)
 					return resourceId, nil
 				}
 			}
@@ -415,15 +415,15 @@ func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPo
 
 	// Dump the full response for debugging
 	fullResponseBytes, _ := json.MarshalIndent(responseObj, "", "  ")
-	log.Printf("\n[CERTIFICATE LOOKUP][ERROR] ❌ Could not find resource ID in response structure:\n%s\n", string(fullResponseBytes))
+	logger.Error("❌ Could not find resource ID in response structure:\n%s\n", string(fullResponseBytes))
 
 	return "", fmt.Errorf("resource ID not found in response or certificate not found")
 }
 
 func resourceRevokeCertificateRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n[CERTIFICATE REVOCATION][INFO] ℹ️  GET OPERATION FOR REVOKED CERTIFICATE")
-	log.Println("   Since revocation is a one-time operation, returning existing state")
-	log.Println("======================================================================\n")
+	logger.Info("ℹ️  GET OPERATION FOR REVOKED CERTIFICATE")
+	logger.Info("   Since revocation is a one-time operation, returning existing state")
+	logger.Info("======================================================================")
 
 	// Preserve all state values
 	for _, key := range []string{"serial_number", "issuer_common_name", "reason", "comments",
@@ -437,9 +437,9 @@ func resourceRevokeCertificateRead(ctx context.Context, d *schema.ResourceData, 
 }
 
 func resourceRevokeCertificateDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n[CERTIFICATE REVOCATION][INFO] 🗑️  DELETE OPERATION FOR CERTIFICATE REVOCATION")
-	log.Println("   Revocation is a one-way operation, removing resource from state only")
-	log.Println("======================================================================\n")
+	logger.Info("🗑️  DELETE OPERATION FOR CERTIFICATE REVOCATION")
+	logger.Info("   Revocation is a one-way operation, removing resource from state only")
+	logger.Info("======================================================================")
 	// Revocation is a one-way operation, so deletion from terraform doesn't actually delete anything on AppViewX
 	// We just remove the resource from state
 	d.SetId("")
@@ -447,6 +447,6 @@ func resourceRevokeCertificateDelete(ctx context.Context, d *schema.ResourceData
 }
 
 func resourceRevokeCertificateUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n[CERTIFICATE REVOCATION][INFO] 🗑️  Update OPERATION FOR CERTIFICATE REVOCATION")
+	logger.Info("🗑️  Update OPERATION FOR CERTIFICATE REVOCATION")
 	return nil
 }

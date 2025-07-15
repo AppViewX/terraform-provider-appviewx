@@ -84,4 +84,6 @@ const (
 	APACHE_CUSTOM_PUSH          = "apache_custom_push"
 	APACHE_CERTIFICATE_LOCATION = "apache_certificate_location"
 	APACHE_KEY_LOCATION         = "apache_key_location"
+
+	LOG_LEVEL                    = "log_level"
 )

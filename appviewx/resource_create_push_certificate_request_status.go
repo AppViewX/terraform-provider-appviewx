@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"regexp"
@@ -20,6 +19,8 @@ import (
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
+	"terraform-provider-appviewx/appviewx/logger"
+
 )
 
 // Status code constants
@@ -133,11 +134,6 @@ func CreatePushCertificateRequestStatus() *schema.Resource {
 				Computed:    true,
 				Description: "Last time the status was polled",
 			},
-			"certificate_resource_id": {
-				Type:        schema.TypeString,
-				Computed:    true,
-				Description: "The resource ID of the created certificate (extracted from 'Trigger Certificate Creation' task)",
-			},
 			"is_download_required": {
 				Type:        schema.TypeBool,
 				Optional:    true,
@@ -148,7 +144,7 @@ func CreatePushCertificateRequestStatus() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "Password for the downloaded certificate (if applicable)",
-				Sensitive: true,
+				Sensitive:   true,
 			},
 			"certificate_download_path": {
 				Type:        schema.TypeString,
@@ -195,40 +191,25 @@ func CreatePushCertificateRequestStatus() *schema.Resource {
 }
 
 func createPushCertificateRequestStatusRead(d *schema.ResourceData, m interface{}) error {
-	// log.Println("[INFO] **************** READ OPERATION - WORKFLOW LOGS ****************")
-
-	// // Preserve all fields to avoid drift warnings
-	// schemaKeys := []string{
-	// 	"request_id", "retry_count", "retry_interval", "success", "workflow_status",
-	// 	"workflow_status_code", "task_summary", "failed_task_logs", "certificate_resource_id",
-	// 	"is_download_required", "certificate_download_path", "certificate_download_format",
-	// 	"certificate_chain_required", "downloaded_certificate_path",
-	// 	"certificate_common_name", "certificate_serial_number",
-	// }
-
-	// for _, key := range schemaKeys {
-	// 	if v, ok := d.GetOk(key); ok {
-	// 		d.Set(key, v)
-	// 	}
-	// }
+	logger.Info(" **************** READ OPERATION - WORKFLOW LOGS ****************")
 
 	return nil
 }
 
 func createPushCertificateRequestStatusDelete(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** DELETE OPERATION FOR WORKFLOW LOGS **************** ")
+	logger.Info(" **************** DELETE OPERATION FOR WORKFLOW LOGS **************** ")
 	// Since this is a read-only resource, deletion just removes it from state
 	return nil
 }
 
 func createPushCertificateRequestStatusUpdate(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** UPDATE OPERATION FOR WORKFLOW LOGS **************** ")
+	logger.Info(" **************** UPDATE OPERATION FOR WORKFLOW LOGS **************** ")
 	// Since this is a read-only resource, update just removes it from state
 	return nil
 }
 
 func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** CREATE OPERATION FOR WORKFLOW LOGS **************** ")
+	logger.Info(" **************** CREATE OPERATION FOR WORKFLOW LOGS **************** ")
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
 
 	// d.Partial(true)
@@ -237,7 +218,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 	requestID := d.Get("request_id").(string)
 
 	if requestID == "" {
-		log.Println("[INFO] No request ID provided, skipping workflow status polling")
+		logger.Info(" No request ID provided, skipping workflow status polling")
 
 		// Set a placeholder ID
 		d.SetId(fmt.Sprintf("revoke-workflow-log-skipped-%s", strconv.Itoa(rand.Int())))
@@ -257,7 +238,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 	retryCount := d.Get("retry_count").(int)
 	retryInterval := d.Get("retry_interval").(int)
 
-	log.Printf("[INFO] Starting polling for workflow request ID: %s (max %d retries, %d second intervals)",
+	logger.Info(" Starting polling for workflow request ID: %s (max %d retries, %d second intervals)",
 		requestID, retryCount, retryInterval)
 
 	// Set resource ID early to ensure it's set even if polling fails
@@ -280,7 +261,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 
 	// Start polling
 	for attempt := 1; attempt <= retryCount; attempt++ {
-		log.Printf("[INFO] Polling attempt %d/%d for workflow request ID: %s", attempt, retryCount, requestID)
+		logger.Info(" Polling attempt %d/%d for workflow request ID: %s", attempt, retryCount, requestID)
 
 		// Get authentication token for this request
 		appviewxSessionID, accessToken, err := authenticate(
@@ -290,7 +271,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 			appviewxEnvironmentIsHTTPS)
 
 		if err != nil {
-			log.Printf("[ERROR] Authentication failed on polling attempt %d: %v", attempt, err)
+			logger.Error(" Authentication failed on polling attempt %d: %v", attempt, err)
 			// If we're on the last attempt, return the error
 			if attempt == retryCount {
 				return err
@@ -307,7 +288,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 			accessToken, requestID, appviewxGwSource)
 
 		if err != nil {
-			log.Printf("[ERROR] Failed to poll workflow status on attempt %d: %v", attempt, err)
+			logger.Error(" Failed to poll workflow status on attempt %d: %v", attempt, err)
 			// If we're on the last attempt, return the error
 			if attempt == retryCount {
 				return err
@@ -320,7 +301,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 		// Parse the response
 		var responseObj map[string]interface{}
 		if err := json.Unmarshal(respBody, &responseObj); err != nil {
-			log.Printf("[ERROR] Failed to parse response JSON on attempt %d: %v", attempt, err)
+			logger.Error(" Failed to parse response JSON on attempt %d: %v", attempt, err)
 			if attempt == retryCount {
 				return err
 			}
@@ -340,14 +321,14 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 
 		// If workflow has completed (success or failure), break out of the loop
 		if completed {
-			log.Printf("[INFO] Workflow completed with status code %d after %d polling attempts",
+			logger.Info(" Workflow completed with status code %d after %d polling attempts",
 				statusCode, attempt)
 			break
 		}
 
 		// If we're not done yet and not on the last attempt, wait before trying again
 		if attempt < retryCount {
-			log.Printf("[INFO] Workflow Request ID: %s is in progress (status code: %d). Waiting %d seconds before next poll...",
+			logger.Info(" Workflow Request ID: %s is in progress (status code: %d). Waiting %d seconds before next poll...",
 				requestID, statusCode, retryInterval)
 			time.Sleep(time.Duration(retryInterval) * time.Second)
 		}
@@ -358,7 +339,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 
 	// If we've exhausted retries and workflow is still not complete
 	if !completed {
-		log.Printf("[WARN] Maximum retry count (%d) reached, but workflow is still in progress", retryCount)
+		logger.Warn("Maximum retry count (%d) reached, but workflow is still in progress", retryCount)
 	}
 
 	// Process and store the final response data
@@ -379,7 +360,7 @@ func authenticate(username, password, clientId, clientSecret, envIP, envPort str
 	if username != "" && password != "" {
 		sessionID, err = GetSession(username, password, envIP, envPort, "WEB", isHTTPS)
 		if err != nil {
-			log.Println("[DEBUG] Session authentication failed, trying client credentials")
+			logger.Info(" Session authentication failed, trying client credentials")
 		} else {
 			return sessionID, "", nil
 		}
@@ -389,7 +370,7 @@ func authenticate(username, password, clientId, clientSecret, envIP, envPort str
 	if sessionID == "" && clientId != "" && clientSecret != "" {
 		accessToken, err = GetAccessToken(clientId, clientSecret, envIP, envPort, "WEB", isHTTPS)
 		if err != nil {
-			log.Println("[ERROR] Client credentials authentication failed")
+			logger.Error(" Client credentials authentication failed")
 			return "", "", err
 		}
 		return "", accessToken, nil
@@ -412,7 +393,7 @@ func pollWorkflowStatus(envIP, envPort string, isHTTPS bool, sessionID, accessTo
 
 	// Get URL for visualworkflow-request-logs
 	url := GetURL(envIP, envPort, "visualworkflow-request-logs", queryParams, isHTTPS)
-	log.Printf("[DEBUG] 🌐 Fetching workflow request details using URL: %s", url)
+	logger.Debug(" 🌐 Fetching workflow request details using URL: %s", url)
 
 	// Create HTTP client
 	client := &http.Client{Transport: HTTPTransport()}
@@ -503,7 +484,7 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 
 				if status, ok := firstRequest["status"].(string); ok {
 					d.Set("workflow_status", status)
-					log.Printf("[INFO] Workflow status: %s (code: %d)", status, statusCode)
+					logger.Info(" Workflow status: %s (code: %d)", status, statusCode)
 				}
 
 				if createdBy, ok := firstRequest["created_by"].(string); ok {
@@ -519,7 +500,7 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 				// Set success flag based on status code
 				isSuccess := statusCode == STATUS_SUCCESS
 				d.Set("success", isSuccess)
-				// log.Printf("[INFO] Workflow success: %t (completed: %t)", isSuccess, completed)
+				// logger.Info(" Workflow success: %t (completed: %t)", isSuccess, completed)
 
 				// Pretty logging for success or failure
 				requestId := d.Get("request_id").(string)
@@ -538,38 +519,38 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 					if commonName != "" {
 						successData["certificate_common_name"] = commonName
 					}
-
+					var resourceId string
 					// Process tasks to extract certificate resource ID if needed
 					if tasks, ok := firstRequest["tasks"].([]interface{}); ok {
 						// Log how many tasks we found
-						log.Printf("[DEBUG] Found %d tasks in workflow response", len(tasks))
+						logger.Debug(" Found %d tasks in workflow response", len(tasks))
 
 						// Extract certificate resource ID if workflow succeeded
-						resourceId := extractCertificateResourceId(tasks)
+						resourceId = extractCertificateResourceId(tasks)
 						if resourceId != "" {
-							d.Set("certificate_resource_id", resourceId)
-							log.Printf("[INFO] Saved certificate resource ID to state: %s", resourceId)
+							// d.Set("certificate_resource_id", resourceId)
+							logger.Info(" Saved certificate resource ID to state: %s", resourceId)
 						}
 					}
 
 					// Check if certificate download is required and handle it
 					if d.Get("is_download_required").(bool) {
-						log.Printf("[INFO] Certificate download is required, initiating download...")
+						logger.Info(" Certificate download is required, initiating download...")
 						// Call the download function with the necessary parameters
-						downloadCertificateIfRequired(d, m, true)
+						downloadCertificateIfRequired(resourceId, d, m, true)
 
-						resourceId := d.Get("certificate_resource_id").(string)
+						// resourceId := d.Get("certificate_resource_id").(string)
 						successData["resource_id"] = resourceId
 
 						certificateDownloadPath := d.Get("certificate_download_path").(string)
 						successData["certificate_download_path"] = certificateDownloadPath
 
 					} else {
-						log.Printf("[INFO] Certificate download not requested (is_download_required=false)")
+						logger.Info(" Certificate download not requested (is_download_required=false)")
 					}
 					successJSON, _ := json.MarshalIndent(successData, "", "  ")
 					successMessage := fmt.Sprintf("\n[CERTIFICATE CREATION][SUCCESS] ✅ Operation Result:\n%s\n", string(successJSON))
-					log.Println(successMessage)
+					logger.Info(successMessage)
 				} else if completed {
 					// Create a failure summary for completed but failed workflows
 					failureData := map[string]interface{}{
@@ -615,7 +596,7 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 
 					failureJSON, _ := json.MarshalIndent(failureData, "", "  ")
 					failureMessage := fmt.Sprintf("\n[CERTIFICATE CREATION AND PUSH TO AKV][FAILURE] ❌ Operation Result:\n%s\n", string(failureJSON))
-					log.Println(failureMessage)
+					logger.Error(failureMessage)
 				} else {
 					// For incomplete operations (timed out)
 					timeoutData := map[string]interface{}{
@@ -635,7 +616,7 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 
 					timeoutJSON, _ := json.MarshalIndent(timeoutData, "", "  ")
 					timeoutMessage := fmt.Sprintf("\n[CERTIFICATE CREATION][TIMEOUT] ⏱️ Operation Result:\n%s\n", string(timeoutJSON))
-					log.Println(timeoutMessage)
+					logger.Info(timeoutMessage)
 				}
 			}
 		}
@@ -643,7 +624,7 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 
 	// Add the failure reason to the response message if it exists
 	if failureReason != "" && failureReason != "No specific failure reason found in logs" {
-		log.Printf("[INFO] Failure reason: %s", failureReason)
+		logger.Info(" Failure reason: %s", failureReason)
 	}
 
 	// Set the response message and failure reason
@@ -693,53 +674,57 @@ func buildResponseMessage(requestData map[string]interface{}, statusCode int, fa
 
 // Update the extractFailureReason function with a simpler approach
 func extractFailureReason(logs []interface{}) string {
-	// If there are no logs, we can't extract a failure reason
-	if len(logs) == 0 {
-		return "No logs found to determine failure reason"
-	}
+    // If there are no logs, we can't extract a failure reason
+    if len(logs) == 0 {
+        return "No logs found to determine failure reason"
+    }
 
-	// Get the second-to-last log entry if available (often contains the failure message)
-	// If not available, try the last entry
-	var relevantLog map[string]interface{}
+    // Special case: If second-to-last log entry contains "Request Failed.Please check the Request ID",
+    // then use the third-to-last entry which typically contains the detailed error
+    if len(logs) >= 3 {
+        // Check second-to-last entry for reference to another request ID
+        if secondToLast, ok := logs[len(logs)-2].(map[string]interface{}); ok {
+            secondToLastMsg := getStringValue(secondToLast, "message")
+            if strings.Contains(secondToLastMsg, "Request Failed.Please check the Request ID") {
+                logger.Debug("Found reference to another request ID in logs, checking third-to-last message for details")
+                
+                // Get the third-to-last log entry which should contain the actual error
+                if thirdToLast, ok := logs[len(logs)-3].(map[string]interface{}); ok {
+                    thirdToLastMsg := getStringValue(thirdToLast, "message")
+                    if thirdToLastMsg != "" {
+                        // Return the third-to-last message directly without parsing
+                        return thirdToLastMsg
+                    }
+                }
+            }
+        }
+    }
 
-	if len(logs) >= 2 {
-		if logEntry, ok := logs[len(logs)-2].(map[string]interface{}); ok {
-			relevantLog = logEntry
-		}
-	}
+    // Original logic for other cases
+    // Try second-to-last entry first
+    var relevantLog map[string]interface{}
 
-	// If we couldn't get the second-to-last, try the last one
-	if relevantLog == nil && len(logs) > 0 {
-		if logEntry, ok := logs[len(logs)-1].(map[string]interface{}); ok {
-			relevantLog = logEntry
-		}
-	}
+    if len(logs) >= 2 {
+        if logEntry, ok := logs[len(logs)-2].(map[string]interface{}); ok {
+            relevantLog = logEntry
+        }
+    }
 
-	// If we found a relevant log entry, extract the message
-	if relevantLog != nil {
-		if message, ok := relevantLog["message"].(string); ok && message != "" {
-			// Format the failure message as pretty JSON
-			failureData := map[string]interface{}{
-				"type":    "Workflow Task Failure",
-				"message": message,
-			}
+    // If we couldn't get the second-to-last, try the last one
+    if relevantLog == nil && len(logs) > 0 {
+        if logEntry, ok := logs[len(logs)-1].(map[string]interface{}); ok {
+            relevantLog = logEntry
+        }
+    }
 
-			// Add user if available
-			if user, ok := relevantLog["user"].(string); ok && user != "" {
-				failureData["reported_by"] = user
-			}
+    // If we found a relevant log entry, extract the message
+    if relevantLog != nil {
+        if message, ok := relevantLog["message"].(string); ok && message != "" {
+            return message
+        }
+    }
 
-			// Add timestamp if available
-			if timestamp, ok := relevantLog["time"].(float64); ok && timestamp > 0 {
-				t := time.Unix(int64(timestamp)/1000, 0)
-				failureData["timestamp"] = t.Format(time.RFC3339)
-			}
-
-			return message
-		}
-	}
-
-	return "No specific failure reason found in logs"
+    return "No specific failure reason found in logs"
 }
 
 // Update the processTasks function to focus on the actual failure message
@@ -774,7 +759,7 @@ func processTasks(tasks []interface{}, isSuccess bool) (string, string, string) 
 
 	// If we found failed tasks, focus on them
 	if len(failedTasks) > 0 {
-		log.Printf("[INFO] Found %d failed tasks in workflow", len(failedTasks))
+		logger.Info(" Found %d failed tasks in workflow", len(failedTasks))
 
 		// Get the first failed task for the primary error message
 		failedTask := failedTasks[0]
@@ -825,81 +810,6 @@ func containsAny(s string, substrs []string) bool {
 		}
 	}
 	return false
-}
-
-// Clean up error messages that might contain Python structures, JSON, etc.
-func cleanErrorMessage(message string) string {
-	// If message contains "Failure Reason", extract that part
-	if strings.Contains(message, "Failure Reason:") {
-		return extractReasonFromMessage(message)
-	}
-
-	// Remove Python list/dict syntax if present
-	re := regexp.MustCompile(`\[.*?\]|\{.*?\}`)
-	message = re.ReplaceAllString(message, "")
-
-	// Remove extra whitespace
-	message = strings.TrimSpace(message)
-	reSpace := regexp.MustCompile(`\s+`)
-	message = reSpace.ReplaceAllString(message, " ")
-
-	// If we have a message after all the cleaning, return it
-	if message != "" && message != ":" && len(message) > 3 {
-		return message
-	}
-
-	return ""
-}
-
-// Extract the specific reason from a "Failure Reason:" message
-func extractReasonFromMessage(message string) string {
-	// Look for the pattern "Failure Reason: [something]" or similar
-	if strings.Contains(message, "Failure Reason:") {
-		parts := strings.SplitN(message, "Failure Reason:", 2)
-		if len(parts) > 1 {
-			failureMsg := strings.TrimSpace(parts[1])
-
-			// If the failure message contains error info inside Python-like structures
-			// Try to extract the actual message text
-			if strings.Contains(failureMsg, "'message':") {
-				// Extract text between 'message': and the next comma or closing bracket
-				re := regexp.MustCompile(`'message':\s*'([^']+)'`)
-				matches := re.FindStringSubmatch(failureMsg)
-				if len(matches) > 1 {
-					return matches[1]
-				}
-			}
-
-			// If the failure message is a Python-like list
-			if strings.HasPrefix(failureMsg, "[") && strings.HasSuffix(failureMsg, "]") {
-				// Try to extract the most useful part - often the last message
-				if strings.Contains(failureMsg, "'message':") {
-					re := regexp.MustCompile(`'message':\s*'([^']+)'`)
-					matches := re.FindAllStringSubmatch(failureMsg, -1)
-					if len(matches) > 0 {
-						// Return the last message as it's often the most specific
-						return matches[len(matches)-1][1]
-					}
-				}
-			}
-
-			// Return the whole message if we couldn't extract a specific part
-			return failureMsg
-		}
-	}
-
-	// Direct error messages without "Failure Reason:" prefix
-	errorIndicators := []string{"Error:", "Failed:", "Unable to"}
-	for _, indicator := range errorIndicators {
-		if strings.Contains(message, indicator) {
-			parts := strings.SplitN(message, indicator, 2)
-			if len(parts) > 1 {
-				return strings.TrimSpace(parts[1])
-			}
-		}
-	}
-
-	return ""
 }
 
 // Helper functions for getting values from maps
@@ -967,13 +877,13 @@ func extractCertificateResourceId(tasks []interface{}) string {
 
 					// Look for JSON response containing resourceId
 					if strings.Contains(message, "resourceId") {
-						log.Printf("[DEBUG] Found message containing resourceId: %s", message)
+						logger.Debug(" Found message containing resourceId: %s", message)
 
 						// Strategy 1.1: Extract using regex for Python dict format
 						reDict := regexp.MustCompile(`'resourceId':\s*'([^']+)'`)
 						matches := reDict.FindStringSubmatch(message)
 						if len(matches) > 1 {
-							log.Printf("[INFO] Extracted certificate resource ID (Python dict): %s", matches[1])
+							logger.Info(" Extracted certificate resource ID (Python dict): %s", matches[1])
 							return matches[1]
 						}
 
@@ -981,7 +891,7 @@ func extractCertificateResourceId(tasks []interface{}) string {
 						reJson := regexp.MustCompile(`"resourceId":\s*"([^"]+)"`)
 						matches = reJson.FindStringSubmatch(message)
 						if len(matches) > 1 {
-							log.Printf("[INFO] Extracted certificate resource ID (JSON): %s", matches[1])
+							logger.Info(" Extracted certificate resource ID (JSON): %s", matches[1])
 							return matches[1]
 						}
 
@@ -997,12 +907,12 @@ func extractCertificateResourceId(tasks []interface{}) string {
 								if err := json.Unmarshal([]byte(jsonStr), &jsonData); err == nil {
 									if resp, ok := jsonData["response"].(map[string]interface{}); ok {
 										if resourceId, ok := resp["resourceId"].(string); ok && resourceId != "" {
-											log.Printf("[INFO] Extracted certificate resource ID (JSON parse): %s", resourceId)
+											logger.Info(" Extracted certificate resource ID (JSON parse): %s", resourceId)
 											return resourceId
 										}
 									}
 								} else {
-									log.Printf("[DEBUG] Failed to parse JSON: %v", err)
+									logger.Debug(" Failed to parse JSON: %v", err)
 								}
 							}
 						}
@@ -1023,7 +933,7 @@ func extractCertificateResourceId(tasks []interface{}) string {
 						re := regexp.MustCompile(`Certificate created with resource ID[:\s]+([a-zA-Z0-9]+)`)
 						matches := re.FindStringSubmatch(message)
 						if len(matches) > 1 {
-							log.Printf("[INFO] Extracted certificate resource ID from creation message: %s", matches[1])
+							logger.Info(" Extracted certificate resource ID from creation message: %s", matches[1])
 							return matches[1]
 						}
 					}
@@ -1055,14 +965,14 @@ func extractCertificateResourceId(tasks []interface{}) string {
 
 				// Look for resourceId in any log message
 				if strings.Contains(message, "resourceId") {
-					log.Printf("[DEBUG] Found message containing resourceId in task %s: %s",
+					logger.Debug(" Found message containing resourceId in task %s: %s",
 						getStringValue(task, "task_name"), message)
 
 					// Try regex extraction
 					re := regexp.MustCompile(`['"](resourceId)['"]:\s*['"]([^'"]+)['"]`)
 					matches := re.FindStringSubmatch(message)
 					if len(matches) > 2 {
-						log.Printf("[INFO] Extracted certificate resource ID from general logs: %s", matches[2])
+						logger.Info(" Extracted certificate resource ID from general logs: %s", matches[2])
 						return matches[2]
 					}
 				}
@@ -1070,7 +980,7 @@ func extractCertificateResourceId(tasks []interface{}) string {
 		}
 	}
 
-	log.Printf("[INFO] No certificate resource ID found in workflow logs")
+	logger.Info(" No certificate resource ID found in workflow logs")
 	return ""
 }
 
@@ -1078,7 +988,7 @@ func extractCertificateResourceId(tasks []interface{}) string {
 
 // fetchCertificateDetails retrieves certificate details using the resource ID
 func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) (string, string, error) {
-	log.Printf("[INFO] Fetching certificate details for resource ID: %s", resourceId)
+	logger.Info(" Fetching certificate details for resource ID: %s", resourceId)
 
 	// Extract configuration parameters
 	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
@@ -1092,7 +1002,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 
 	// Get URL for the certificate search endpoint
 	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "certificate/search", queryParams, appviewxEnvironmentIsHTTPS)
-	log.Printf("Certificate Type :::::::::::::::::::::::::::::::: %s", certType)
+	logger.Info("Certificate Type :::::::::::::::::::::::::::::::: %s", certType)
 	// Build search payload
 	payload := map[string]interface{}{
 		"input": map[string]interface{}{
@@ -1108,7 +1018,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	// Prepare the request
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("[ERROR] Error marshalling certificate search payload: %v", err)
+		logger.Error(" Error marshalling certificate search payload: %v", err)
 		return "", "", err
 	}
 
@@ -1118,7 +1028,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	// Create request
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		log.Printf("[ERROR] Error creating certificate search request: %v", err)
+		logger.Error(" Error creating certificate search request: %v", err)
 		return "", "", err
 	}
 
@@ -1133,12 +1043,12 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 		req.Header.Set(constants.TOKEN, accessToken)
 	}
 
-	log.Printf("[DEBUG] Sending certificate search request to: %s", url)
+	logger.Debug(" Sending certificate search request to: %s", url)
 
 	// Make the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[ERROR] Error making certificate search request: %v", err)
+		logger.Error(" Error making certificate search request: %v", err)
 		return "", "", err
 	}
 	defer resp.Body.Close()
@@ -1146,22 +1056,22 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[ERROR] Error reading certificate search response: %v", err)
+		logger.Error(" Error reading certificate search response: %v", err)
 		return "", "", err
 	}
 
 	// Format and log JSON response for debugging
 	// var prettyJSON bytes.Buffer
 	// if json.Indent(&prettyJSON, body, "", "  ") == nil {
-	// 	log.Printf("[DEBUG] Certificate search response body (formatted JSON):\n%s", prettyJSON.String())
+	// 	logger.Debug(" Certificate search response body (formatted JSON):\n%s", prettyJSON.String())
 	// } else {
-	// 	log.Printf("[DEBUG] Certificate search response body (raw):\n%s", string(body))
+	// 	logger.Debug(" Certificate search response body (raw):\n%s", string(body))
 	// }
 
 	// Parse response to extract certificate details
 	var responseObj map[string]interface{}
 	if err := json.Unmarshal(body, &responseObj); err != nil {
-		log.Printf("[ERROR] Error parsing certificate search response: %v", err)
+		logger.Error(" Error parsing certificate search response: %v", err)
 		return "", "", err
 	}
 
@@ -1174,12 +1084,12 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 				if cert, ok := objects[0].(map[string]interface{}); ok {
 					if cn, ok := cert["commonName"].(string); ok {
 						commonName = cn
-						log.Printf("[INFO] Found certificate common name: %s", commonName)
+						logger.Info(" Found certificate common name: %s", commonName)
 					}
 
 					if sn, ok := cert["serialNumber"].(string); ok {
 						serialNumber = sn
-						log.Printf("[INFO] Found certificate serial number: %s", serialNumber)
+						logger.Info(" Found certificate serial number: %s", serialNumber)
 					}
 				}
 			}
@@ -1187,7 +1097,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	}
 
 	if commonName == "" || serialNumber == "" {
-		log.Printf("[WARN] Could not extract certificate details from response")
+		logger.Warn("Could not extract certificate details from response")
 		return "", "", fmt.Errorf("certificate details not found in response")
 	}
 
@@ -1195,26 +1105,26 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 }
 
 // downloadCertificateIfRequired handles certificate downloading if requested in configuration
-func downloadCertificateIfRequired(d *schema.ResourceData, m interface{}, isSuccess bool) {
+func downloadCertificateIfRequired(resourceId string, d *schema.ResourceData, m interface{}, isSuccess bool) {
 	// Only proceed if workflow succeeded and download is requested
 	if !isSuccess || !d.Get("is_download_required").(bool) {
 		return
 	}
 
-	resourceId := d.Get("certificate_resource_id").(string)
+	// resourceId := d.Get("certificate_resource_id").(string)
 	certCommonName := d.Get("certificate_common_name").(string)
-	if certCommonName== "" {
-		log.Printf("[INFO] Certificate Common Name not found in the Input, Proceeding with the Default Certificate Name")
+	if certCommonName == "" {
+		logger.Info(" Certificate Common Name not found in the Input, Proceeding with the Default Certificate Name")
 		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	    certCommonName = "certificate-" + resourceId + "-" + timestamp
+		certCommonName = "certificate-" + resourceId + "-" + timestamp
 	}
-	log.Printf("[DEBUG] Certificate common name: %s", certCommonName)
+	logger.Debug(" Certificate common name: %s", certCommonName)
 	if resourceId == "" {
-		log.Printf("[WARN] Cannot download certificate: No certificate resource ID found in workflow response")
+		logger.Warn("Cannot download certificate: No certificate resource ID found in workflow response")
 		return
 	}
 
-	log.Printf("[INFO] Initiating certificate download for resource ID: %s", resourceId)
+	logger.Info(" Initiating certificate download for resource ID: %s", resourceId)
 
 	// Get authentication tokens
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
@@ -1233,13 +1143,13 @@ func downloadCertificateIfRequired(d *schema.ResourceData, m interface{}, isSucc
 	if appviewxUserName != "" && appviewxPassword != "" {
 		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Printf("[ERROR] Error getting session for certificate download: %v", err)
+			logger.Error(" Error getting session for certificate download: %v", err)
 			return
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
 		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Printf("[ERROR] Error getting access token for certificate download: %v", err)
+			logger.Error(" Error getting access token for certificate download: %v", err)
 			return
 		}
 	}
@@ -1250,7 +1160,7 @@ func downloadCertificateIfRequired(d *schema.ResourceData, m interface{}, isSucc
 	certificateChainRequired := d.Get("certificate_chain_required").(bool)
 
 	if downloadPath == "" {
-		log.Printf("[WARN] Cannot download certificate: No download path specified")
+		logger.Warn("Cannot download certificate: No download path specified")
 		return
 	}
 
@@ -1267,7 +1177,7 @@ func downloadCertificateIfRequired(d *schema.ResourceData, m interface{}, isSucc
 
 	fullDownloadPath += safeCommonName + "." + strings.ToLower(downloadFormat)
 
-	log.Printf("[INFO] Downloading certificate to: %s", fullDownloadPath)
+	logger.Info(" Downloading certificate to: %s", fullDownloadPath)
 	// Get certificate download password if required
 	certDownloadPassword := d.Get("certificate_download_password").(string)
 	// Download certificate
@@ -1285,9 +1195,9 @@ func downloadCertificateIfRequired(d *schema.ResourceData, m interface{}, isSucc
 	)
 
 	if downloadSuccess {
-		log.Printf("[INFO] Certificate downloaded successfully to: %s", fullDownloadPath)
+		logger.Info(" Certificate downloaded successfully to: %s", fullDownloadPath)
 		d.Set("downloaded_certificate_path", fullDownloadPath)
 	} else {
-		log.Printf("[ERROR] Failed to download certificate")
+		logger.Error(" Failed to download certificate")
 	}
 }

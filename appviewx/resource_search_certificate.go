@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -15,6 +14,7 @@ import (
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
+	"terraform-provider-appviewx/appviewx/logger"
 )
 
 func ResourceSearchCertificateByKeyword() *schema.Resource {
@@ -84,9 +84,9 @@ func ResourceSearchCertificateByKeyword() *schema.Resource {
 }
 
 func resourceSearchCertificateByKeywordCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n====================[CERTIFICATE SEARCH]====================")
-	log.Println("  🚀  Resource Search Certificate By Keyword Create")
-	log.Println("==================================================================\n")
+	logger.Info("\n====================[CERTIFICATE SEARCH]====================")
+	logger.Info("  🚀  Resource Search Certificate By Keyword Create")
+	logger.Info("==================================================================\n")
 
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
 
@@ -105,17 +105,17 @@ func resourceSearchCertificateByKeywordCreate(ctx context.Context, d *schema.Res
 	if appviewxUserName != "" && appviewxPassword != "" {
 		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Println("\n[CERTIFICATE SEARCH][ERROR] ❌ Error in getting the session:")
-			log.Println("   ", err)
-			log.Println("------------------------------------------------------------------\n")
+			logger.Error("❌ Error in getting the session:")
+			logger.Error("   ", err)
+			logger.Error("----------------------------------------------------------------------")
 			return diag.FromErr(err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
 		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Println("\n[CERTIFICATE SEARCH][ERROR] ❌ Error in getting the access token:")
-			log.Println("   ", err)
-			log.Println("------------------------------------------------------------------\n")
+			logger.Error("❌ Error in getting the access token:")
+			logger.Error("   ", err)
+			logger.Error("----------------------------------------------------------------------")
 			return diag.FromErr(err)
 		}
 	}
@@ -134,7 +134,7 @@ func resourceSearchCertificateByKeywordCreate(ctx context.Context, d *schema.Res
 
 	// DO NOT store certificates or raw response in state
 
-	log.Printf("\n[CERTIFICATE SEARCH][INFO] ✅ Search complete with %d total records\n", result.TotalRecords)
+	logger.Info("✅ Search complete with %d total records\n", result.TotalRecords)
 
 	return nil
 }
@@ -179,33 +179,33 @@ func searchCertificatesByKeyword(d *schema.ResourceData, configAppViewXEnvironme
 	// Get URL
 	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "certificate/search", queryParams, appviewxEnvironmentIsHTTPS)
 
-	log.Printf("\n[CERTIFICATE SEARCH][DEBUG] 🔍 Searching certificates using URL: %s\n", url)
+	logger.Debug("🔍 Searching certificates using URL: %s", url)
 
 	// Build search payload
 	payload := buildSearchPayload(d)
 
 	// Pretty print payload
 	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
-	log.Printf("\n[CERTIFICATE SEARCH][DEBUG] 📝 Search payload:\n%s\n", string(payloadBytes))
+	logger.Debug("📝 Search payload:\n%s\n", string(payloadBytes))
 
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		log.Println("\n[CERTIFICATE SEARCH][ERROR] ❌ Error in Marshalling the payload:")
-		log.Println("   ", err)
-		log.Printf("   Payload: %+v\n", payload)
-		log.Println("------------------------------------------------------------------\n")
+		logger.Error("❌ Error in Marshalling the payload:")
+		logger.Error("   ", err)
+		logger.Debug("   Payload: %+v\n", payload)
+		logger.Debug("------------------------------------------------------------------\n")
 		return result, err
 	}
 
 	client := &http.Client{Transport: HTTPTransport()}
 
-	log.Printf("\n[CERTIFICATE SEARCH][INFO] 🌐 Making request to %s\n", url)
+	logger.Debug("🌐 Making request to %s\n", url)
 
 	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		log.Println("\n[CERTIFICATE SEARCH][ERROR] ❌ Error in creating new Request:")
-		log.Println("   ", err)
-		log.Println("------------------------------------------------------------------\n")
+		logger.Error("❌ Error in creating new Request:")
+		logger.Error("   ", err)
+		logger.Debug("------------------------------------------------------------------\n")
 		return result, err
 	}
 
@@ -215,10 +215,10 @@ func searchCertificatesByKeyword(d *schema.ResourceData, configAppViewXEnvironme
 
 	// Add session ID header
 	if appviewxSessionID != "" {
-		log.Printf("[CERTIFICATE SEARCH][DEBUG] 🔑 Using session ID for authentication")
+		logger.Debug("🔑 Using session ID for authentication")
 		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
 	} else if accessToken != "" {
-		log.Printf("[CERTIFICATE SEARCH][DEBUG] 🔑 Using access token for authentication\n")
+		logger.Debug("🔑 Using access token for authentication")
 		req.Header.Set(constants.TOKEN, accessToken)
 	}
 
@@ -228,19 +228,19 @@ func searchCertificatesByKeyword(d *schema.ResourceData, configAppViewXEnvironme
 
 	httpResponse, err := client.Do(req)
 	if err != nil {
-		log.Println("\n[CERTIFICATE SEARCH][ERROR] ❌ Error in searching certificates:")
-		log.Println("   ", err)
-		log.Println("------------------------------------------------------------------\n")
+		logger.Error("❌ Error in searching certificates:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
 		return result, err
 	}
 	defer httpResponse.Body.Close()
 
-	log.Printf("[CERTIFICATE SEARCH][INFO] 📊 Search certificates response status code: %s\n", httpResponse.Status)
+	logger.Info("📊 Search certificates response status code: %s\n", httpResponse.Status)
 
 	// Read response body
 	responseBody, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
-		log.Println("[ERROR] Unable to read response body: ", err)
+		logger.Error("Unable to read response body: ", err)
 		return result, err
 	}
 
@@ -248,9 +248,9 @@ func searchCertificatesByKeyword(d *schema.ResourceData, configAppViewXEnvironme
 	// Format and log JSON response for better readability
 	var prettyJSON bytes.Buffer
 	if err := json.Indent(&prettyJSON, responseBody, "", "  "); err != nil {
-		log.Printf("\n[CERTIFICATE SEARCH][DEBUG] 📦 Search response body (raw):\n%s\n", string(responseBody))
+		logger.Info("📦 Search response body (raw):\n%s\n", string(responseBody))
 	} else {
-		log.Printf("\n[CERTIFICATE SEARCH][DEBUG] 📦 Search response body (formatted JSON):\n%s\n", prettyJSON.String())
+		logger.Info("📦 Search response body :\n%s\n", prettyJSON.String())
 	}
 
 	// Store raw response
@@ -258,17 +258,17 @@ func searchCertificatesByKeyword(d *schema.ResourceData, configAppViewXEnvironme
 
 	// Check for error responses
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
-		log.Println("\n[CERTIFICATE SEARCH][ERROR] ❌ Error response received:")
-		log.Println("   Status code:", httpResponse.Status)
-		log.Printf("   Response: %s\n", string(responseBody))
-		log.Println("------------------------------------------------------------------\n")
+		logger.Error("❌ Error response received:")
+		logger.Error("   Status code:", httpResponse.Status)
+		logger.Error("   Response: %s\n", string(responseBody))
+		logger.Error("----------------------------------------------------------------------")
 		return result, errors.New("error in searching certificates: " + string(responseBody))
 	}
 
 	// Parse response
 	var responseObj map[string]interface{}
 	if err := json.Unmarshal(responseBody, &responseObj); err != nil {
-		log.Println("[ERROR] Unable to unmarshal the response: ", err)
+		logger.Error("[ERROR] Unable to unmarshal the response: ", err)
 		return result, err
 	}
 
@@ -335,8 +335,8 @@ func searchCertificatesByKeyword(d *schema.ResourceData, configAppViewXEnvironme
 		}
 	}
 
-	log.Printf("\n[CERTIFICATE SEARCH][DEBUG] ✅ Extracted %d certificates from response\n", len(result.Certificates))
-	log.Println("==================================================================\n")
+	logger.Info("✅ Extracted %d certificates from response\n", len(result.Certificates))
+	logger.Info("==================================================================\n")
 	return result, nil
 }
 
@@ -382,24 +382,24 @@ func buildSearchPayload(d *schema.ResourceData) map[string]interface{} {
 	}
 
 	// Log the final search criteria
-	log.Printf("[CERTIFICATE SEARCH][DEBUG] 🔍 Search criteria: Category=%s, Results=%d-%d, Sort=%s %s\n",
+	logger.Debug("🔍 Search criteria: Category=%s, Results=%d-%d, Sort=%s %s\n",
 		category, startIndex, startIndex+maxResults-1, sortColumn, sortOrder)
 
 	return payload
 }
 
 func resourceSearchCertificateByKeywordRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n[CERTIFICATE SEARCH][INFO] ℹ️ GET OPERATION RETURNS EXISTING DATA\n")
+	logger.Info("ℹ️ GET OPERATION RETURNS EXISTING DATA\n")
 	return nil
 }
 
 func resourceSearchCertificateByKeywordUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n[CERTIFICATE SEARCH][INFO] 🔄 UPDATE OPERATION TRIGGERS NEW SEARCH\n")
+	logger.Info("🔄 UPDATE OPERATION TRIGGERS NEW SEARCH\n")
 	return resourceSearchCertificateByKeywordCreate(ctx, d, m)
 }
 
 func resourceSearchCertificateByKeywordDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	log.Println("\n[CERTIFICATE SEARCH][INFO] 🗑️ Removing certificate search resource from state\n")
+	logger.Info("🗑️ Removing certificate search resource from state\n")
 	d.SetId("")
 	return nil
 }

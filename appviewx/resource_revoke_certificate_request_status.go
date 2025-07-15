@@ -12,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	"terraform-provider-appviewx/appviewx/config"
+	"terraform-provider-appviewx/appviewx/logger"
+
 )
 
 // Status code constants are defined in resource_create_push_certificate_request_status.go
@@ -122,7 +124,7 @@ func RevokeCertificateRequestStatus() *schema.Resource {
 }
 
 func revokeCertificateRequestStatusRead(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** READ OPERATION - REVOKE CERTIFICATE WORKFLOW LOGS ****************")
+	logger.Info("**************** READ OPERATION - REVOKE CERTIFICATE WORKFLOW LOGS ****************")
 
 	// Preserve all fields to avoid drift warnings
 	schemaKeys := []string{
@@ -143,26 +145,27 @@ func revokeCertificateRequestStatusRead(d *schema.ResourceData, m interface{}) e
 }
 
 func revokeCertificateRequestStatusDelete(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** DELETE OPERATION FOR REVOKE CERTIFICATE WORKFLOW LOGS **************** ")
+	logger.Info("**************** DELETE OPERATION FOR REVOKE CERTIFICATE WORKFLOW LOGS **************** ")
 	// Since this is a read-only resource, deletion just removes it from state
+	d.SetId("")
 	return nil
 }
 
 func revokeCertificateRequestStatusUpdate(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** UPDATE OPERATION FOR REVOKE CERTIFICATE WORKFLOW LOGS **************** ")
+	logger.Info("**************** UPDATE OPERATION FOR REVOKE CERTIFICATE WORKFLOW LOGS **************** ")
 	// Since this is a read-only resource, update just removes it from state
 	return nil
 }
 
 func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** CREATE OPERATION FOR REVOKE CERTIFICATE WORKFLOW LOGS **************** ")
+	logger.Info("**************** CREATE OPERATION FOR REVOKE CERTIFICATE WORKFLOW LOGS **************** ")
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
 
 	// Get request ID and retry parameters
 	requestID := d.Get("request_id").(string)
 
 	if requestID == "" {
-		log.Println("[INFO] No request ID provided, skipping workflow status polling")
+		logger.Info("No request ID provided, skipping workflow status polling")
 
 		// Set a placeholder ID
 		d.SetId(fmt.Sprintf("revoke-workflow-log-skipped-%s", strconv.Itoa(rand.Int())))
@@ -182,7 +185,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 	retryCount := d.Get("retry_count").(int)
 	retryInterval := d.Get("retry_interval").(int)
 
-	log.Printf("[INFO] Starting polling for revoke certificate workflow request ID: %s (max %d retries, %d second intervals)",
+	logger.Info(" Starting polling for revoke certificate workflow request ID: %s (max %d retries, %d second intervals)",
 		requestID, retryCount, retryInterval)
 
 	// Set resource ID early to ensure it's set even if polling fails
@@ -205,7 +208,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 
 	// Start polling
 	for attempt := 1; attempt <= retryCount; attempt++ {
-		log.Printf("[INFO] Polling attempt %d/%d for revoke workflow request ID: %s", attempt, retryCount, requestID)
+		logger.Info(" Polling attempt %d/%d for revoke workflow request ID: %s", attempt, retryCount, requestID)
 
 		// Get authentication token for this request
 		appviewxSessionID, accessToken, err := authenticate(
@@ -215,7 +218,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 			appviewxEnvironmentIsHTTPS)
 
 		if err != nil {
-			log.Printf("[ERROR] Authentication failed on polling attempt %d: %v", attempt, err)
+			logger.Error(" Authentication failed on polling attempt %d: %v", attempt, err)
 			// If we're on the last attempt, return the error
 			if attempt == retryCount {
 				return err
@@ -232,7 +235,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 			accessToken, requestID, appviewxGwSource)
 
 		if err != nil {
-			log.Printf("[ERROR] Failed to poll workflow status on attempt %d: %v", attempt, err)
+			logger.Error(" Failed to poll workflow status on attempt %d: %v", attempt, err)
 			// If we're on the last attempt, return the error
 			if attempt == retryCount {
 				return err
@@ -245,7 +248,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 		// Parse the response
 		var responseObj map[string]interface{}
 		if err := json.Unmarshal(respBody, &responseObj); err != nil {
-			log.Printf("[ERROR] Failed to parse response JSON on attempt %d: %v", attempt, err)
+			logger.Error(" Failed to parse response JSON on attempt %d: %v", attempt, err)
 			if attempt == retryCount {
 				return err
 			}
@@ -265,14 +268,14 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 
 		// If workflow has completed (success or failure), break out of the loop
 		if completed {
-			log.Printf("[INFO] Revoke workflow completed with status code %d after %d polling attempts",
+			logger.Info(" Revoke workflow completed with status code %d after %d polling attempts",
 				statusCode, attempt)
 			break
 		}
 
 		// If we're not done yet and not on the last attempt, wait before trying again
 		if attempt < retryCount {
-			log.Printf("[INFO] Revoke Workflow Request is in progress %s (status code: %d). Waiting %d seconds before next poll...", requestID,
+			logger.Info(" Revoke Workflow Request is in progress %s (status code: %d). Waiting %d seconds before next poll...", requestID,
 				statusCode, retryInterval)
 			time.Sleep(time.Duration(retryInterval) * time.Second)
 		}
@@ -283,7 +286,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 
 	// If we've exhausted retries and workflow is still not complete
 	if !completed {
-		log.Printf("[WARN] Maximum retry count (%d) reached, but revoke workflow is still in progress", retryCount)
+		logger.Warn(" Maximum retry count (%d) reached, but revoke workflow is still in progress", retryCount)
 	}
 
 	// Process and store the final response data
@@ -317,7 +320,7 @@ func processRevokeWorkflowResponse(d *schema.ResourceData, responseObj map[strin
 
 				if status, ok := firstRequest["status"].(string); ok {
 					d.Set("workflow_status", status)
-					log.Printf("[INFO] Revoke workflow status: %s (code: %d)", status, statusCode)
+					logger.Info(" Revoke workflow status: %s (code: %d)", status, statusCode)
 				}
 
 				if createdBy, ok := firstRequest["created_by"].(string); ok {
@@ -333,7 +336,7 @@ func processRevokeWorkflowResponse(d *schema.ResourceData, responseObj map[strin
 				// Set success flag based on status code
 				isSuccess := statusCode == STATUS_SUCCESS
 				d.Set("success", isSuccess)
-				// log.Printf("[INFO] Revoke workflow success: %t (completed: %t)", isSuccess, completed)
+				// logger.Info(" Revoke workflow success: %t (completed: %t)", isSuccess, completed)
 
 				// Pretty logging for success or failure
 				requestId := d.Get("request_id").(string)
@@ -416,7 +419,7 @@ func processRevokeWorkflowResponse(d *schema.ResourceData, responseObj map[strin
 
 				if tasks, ok := firstRequest["tasks"].([]interface{}); ok {
 					// Log how many tasks we found
-					log.Printf("[DEBUG] Found %d tasks in revoke workflow response", len(tasks))
+					logger.Debug(" Found %d tasks in revoke workflow response", len(tasks))
 
 					taskSummary, failedTasksLog, failureReason = processTasks(tasks, isSuccess)
 					d.Set("task_summary", taskSummary)
@@ -425,7 +428,7 @@ func processRevokeWorkflowResponse(d *schema.ResourceData, responseObj map[strin
 					if !isSuccess && failureReason == "No specific failure reason found in logs" {
 						// Try to find failure info directly in the workflow response
 						if message, ok := firstRequest["message"].(string); ok && message != "" {
-							log.Printf("[DEBUG] Found message in workflow: %s", message)
+							logger.Debug(" Found message in workflow: %s", message)
 							if containsAny(message, []string{"Failed", "Error", "failed", "error"}) {
 								failureReason = message
 							}
@@ -433,12 +436,12 @@ func processRevokeWorkflowResponse(d *schema.ResourceData, responseObj map[strin
 
 						// If still no reason, check if there's a tooltip
 						if tooltip, ok := firstRequest["toolTip"].(string); ok && tooltip != "" {
-							log.Printf("[DEBUG] Found tooltip in workflow: %s", tooltip)
+							logger.Debug(" Found tooltip in workflow: %s", tooltip)
 							failureReason = tooltip
 						}
 					}
 				} else {
-					log.Printf("[WARN] No tasks found in revoke workflow response")
+					logger.Warn(" No tasks found in revoke workflow response")
 				}
 
 				// Generate pretty response message
@@ -449,7 +452,7 @@ func processRevokeWorkflowResponse(d *schema.ResourceData, responseObj map[strin
 
 	// Add the failure reason to the response message if it exists
 	if failureReason != "" && failureReason != "No specific failure reason found in logs" {
-		log.Printf("[INFO] Revoke failure reason: %s", failureReason)
+		logger.Info(" Revoke failure reason: %s", failureReason)
 	}
 
 	// Set the response message and failure reason

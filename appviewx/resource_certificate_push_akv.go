@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
+	"terraform-provider-appviewx/appviewx/logger"
 )
 
 func ResourceCertificatePushAKV() *schema.Resource {
@@ -65,37 +65,26 @@ func ResourceCertificatePushAKV() *schema.Resource {
 }
 
 func resourceCertificatePushAKVRead(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** GET OPERATION - PRESERVING STATE **************** ")
-
-	// // Preserve all fields to avoid drift warnings
-	// schemaKeys := []string{
-	// 	"field_info", "workflow_name", "status_code", "workflow_id", "success", "certificate_common_name",
-	// }
-
-	// for _, key := range schemaKeys {
-	// 	if v, ok := d.GetOk(key); ok {
-	// 		log.Printf("[DEBUG] Preserving field %s with value: %v", key, v)
-	// 		d.Set(key, v)
-	// 	}
-	// }
+	logger.Info("**************** GET OPERATION - PRESERVING STATE **************** ")
 
 	return nil
 }
 
 func resourceCertificatePushAKVDelete(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** DELETE OPERATION FOR CERTIFICATE PUSH AKV **************** ")
+	logger.Info("**************** DELETE OPERATION FOR CERTIFICATE PUSH AKV **************** ")
 	// Since this is a create-only resource, deletion just removes it from state
+	d.SetId("")
 	return nil
 }
 
 func resourceCertificatePushAKVUpdate(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** UPDATE OPERATION FOR CERTIFICATE PUSH AKV **************** ")
+	logger.Info("**************** UPDATE OPERATION FOR CERTIFICATE PUSH AKV **************** ")
 	// Since this is a create-only resource, update just removes it from state
 	return nil
 }
 
 func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO] **************** CREATE OPERATION FOR CERTIFICATE PUSH AKV **************** ")
+	logger.Info("**************** CREATE OPERATION FOR CERTIFICATE PUSH AKV **************** ")
 	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
 	// d.Partial(true)
 
@@ -116,7 +105,7 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 	if appviewxUserName != "" && appviewxPassword != "" {
 		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Println("[ERROR] Error in getting the session due to : ", err)
+			logger.Error(" Error in getting the session due to : ", err)
 			// Don't return error here, try client ID/secret authentication
 		}
 	}
@@ -125,7 +114,7 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 	if appviewxSessionID == "" && appviewxClientId != "" && appviewxClientSecret != "" {
 		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
 		if err != nil {
-			log.Println("[ERROR] Error in getting the access token due to : ", err)
+			logger.Error(" Error in getting the access token due to : ", err)
 			return err
 		}
 	}
@@ -143,14 +132,14 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 	var tempFieldInfo map[string]interface{}
 	if err := json.Unmarshal([]byte(fieldInfoString), &tempFieldInfo); err == nil {
 		if certificateCommonName, ok := tempFieldInfo["cn_uploadcsr"]; ok {
-			log.Printf("[DEBUG] Certificate Common Name from field_info: %v", certificateCommonName)
+			logger.Debug(" Certificate Common Name from field_info: %v", certificateCommonName)
 			d.Set("certificate_common_name", certificateCommonName)
 		}
 	}
 
 	err = json.Unmarshal([]byte(fieldInfoString), &fieldInfo)
 	if err != nil {
-		log.Printf("[ERROR] Error parsing field_info JSON: %v", err)
+		logger.Error(" Error parsing field_info JSON: %v", err)
 		return fmt.Errorf("invalid field_info JSON: %v", err)
 	}
 
@@ -180,8 +169,8 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 	}
 
 	// Pretty print payload for debugging
-	// payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
-	// log.Printf("\n[DEBUG] Certificate Push AKV payload:\n%s\n", string(payloadBytes))
+	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
+	logger.Debug("\n Certificate Push AKV payload:\n%s\n", string(payloadBytes))
 
 	// Set action ID
 	actionID := "visualworkflow-submit-request"
@@ -204,14 +193,14 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 	client := &http.Client{Transport: HTTPTransport()}
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		log.Println("[ERROR] Error in Marshalling the payload", err)
+		logger.Error(" Error in Marshalling the payload", err)
 		return err
 	}
 
 	// Create request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		log.Println("[ERROR] Error in creating the new request ", err)
+		logger.Error(" Error in creating the new request ", err)
 		return err
 	}
 
@@ -224,17 +213,17 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 
 	// Add authentication header
 	if appviewxSessionID != "" {
-		log.Printf("[DEBUG] Using session ID for authentication")
+		logger.Debug("Using session ID for authentication")
 		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
 	} else if accessToken != "" {
-		log.Printf("[DEBUG] Using access token for authentication")
+		logger.Debug("Using access token for authentication")
 		req.Header.Set(constants.TOKEN, accessToken)
 	}
 
 	// Make the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("[ERROR] Error in making http request", err)
+		logger.Error("Error in making http request", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -245,16 +234,16 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 	// Read response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("[ERROR] Error in reading the response body:", err)
+		logger.Error("Error in reading the response body:", err)
 		return err
 	}
 
 	// Pretty print response for debugging
 	var prettyResp bytes.Buffer
 	if json.Indent(&prettyResp, body, "", "  ") == nil {
-		log.Printf("\n[DEBUG] Response body:\n%s\n", prettyResp.String())
+		logger.Info("\nResponse body:\n%s\n", prettyResp.String())
 	} else {
-		log.Printf("\n[DEBUG] Response body (raw):\n%s\n", string(body))
+		logger.Info("\nResponse body (raw):\n%s\n", string(body))
 	}
 
 	// Extract workflow ID from response if successful
@@ -270,21 +259,21 @@ func resourceCertificatePushAKVCreate(d *schema.ResourceData, m interface{}) err
 			if requestId, ok := resp["requestId"].(string); ok && requestId != "" {
 				workflowId = requestId
 				d.Set("workflow_id", requestId)
-				log.Printf("[INFO] Extracted workflow request ID: %s", requestId)
+				logger.Info("Extracted workflow request ID: %s", requestId)
 			} else {
 				// Fallback to older path in case API structure changes
 				if data, ok := resp["data"].(map[string]interface{}); ok {
 					if wfId, ok := data["workflowId"].(string); ok && wfId != "" {
 						workflowId = wfId
 						d.Set("workflow_id", wfId)
-						log.Printf("[INFO] Extracted workflow ID from data.workflowId: %s", wfId)
+						logger.Info("Extracted workflow ID from data.workflowId: %s", wfId)
 					}
 				}
 			}
 
 			if workflowId == "" {
 				d.Set("workflow_id", "")
-				log.Println("[WARN] Could not extract workflow ID from response")
+				logger.Warn("Could not extract workflow ID from response")
 			}
 		}
 	}

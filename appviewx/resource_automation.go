@@ -70,7 +70,8 @@ func resourceAutomationServerUpdate(d *schema.ResourceData, m interface{}) error
 
 func resourceAutomationServerDelete(d *schema.ResourceData, m interface{}) error {
 	log.Println("[INFO]  **************** DELETE OPERATION NOT SUPPORTED FOR THIS RESOURCE **************** ")
-	// Delete implementation is empty since this resoruce is for the stateless generic api invocation
+	// Delete implementation is empty since this resource is for the stateless generic api invocation
+	d.SetId("")
 	return nil
 }
 
