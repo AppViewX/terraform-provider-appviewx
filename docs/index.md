@@ -26,21 +26,66 @@ AppViewX Terraform Provider allows you to manage certificates using the AppViewX
 
 ```hcl
 provider "appviewx" {
+    appviewx_username="username"
+	appviewx_password="password"
     appviewx_client_id="clientid"
     appviewx_client_secret="clientsecret"
     appviewx_environment_is_https=true
     appviewx_environment_ip="appviewx_environment_ip or appviewx_environment_fqdn"
     appviewx_environment_port="appviewx_port"
+    log_level="INFO"
 }
 ```
 
 ## Atrributes
 
-- `appviewx_client_id`: The client ID used to authenticate with the AppViewX API. This is provided by your AppViewX administrator.
-- `appviewx_client_secret`: The client secret associated with the client ID. This is used for secure authentication.
-- `appviewx_environment_is_https`: A boolean value indicating whether the AppViewX environment uses HTTPS. Set this to `true` if your environment is secured with HTTPS.
-- `appviewx_environment_ip`: The IP address or fully qualified domain name (FQDN) of the AppViewX environment. This specifies the endpoint for API communication. Here only the IP or FQDN should be provided without any port or any other values. In case of onpremise AppViewX, it will be IP or FQDN of the gateway, and in case of SAAS, then provide the FQDN of the AppViewX Tenant.
-- `appviewx_environment_port`: The port number used to connect to the AppViewX environment. Ensure this matches the port configured for API access. In case of onpremise AppViewX it will be 31443, and in case of SAAS then the port will be 443.
+- `appviewx_username`:
+    - The username used to authenticate with the AppViewX API.
+    - This is provided by your AppViewX administrator.
+    - **Environment Variable:** If not specified in the provider block, the value will be read from `APPVIEWX_TERRAFORM_USERNAME`.
+
+- `appviewx_password`:
+    - The password associated with the AppViewX username.
+    - Used for secure authentication.
+    - **Environment Variable:** If not specified in the provider block, the value will be read from `APPVIEWX_TERRAFORM_PASSWORD`.
+
+- `appviewx_client_id`:
+    - The client ID used to authenticate with the AppViewX API.
+    - This is provided by your AppViewX administrator.
+    - **Environment Variable:** If not specified in the provider block, the value will be read from `APPVIEWX_TERRAFORM_CLIENT_ID`.
+
+- `appviewx_client_secret`:
+    - The client secret associated with the client ID. This is used for secure authentication.
+    - **Environment Variable:** If not specified in the provider block, the value will be read from `APPVIEWX_TERRAFORM_CLIENT_SECRET`.
+
+- `appviewx_environment_is_https`:
+    - A boolean value indicating whether the AppViewX environment uses HTTPS.
+    - Set this to `true` if your environment is secured with HTTPS.
+
+- `appviewx_environment_ip`:
+    - The IP address or fully qualified domain name (FQDN) of the AppViewX environment.
+    - Only the IP or FQDN should be provided, without any port or other values.
+    - For on-premise AppViewX, use the IP or FQDN of the gateway.
+    - For SaaS, provide the FQDN of the AppViewX Tenant.
+
+- `appviewx_environment_port`:
+    - The port number used to connect to the AppViewX environment.
+    - Ensure this matches the port configured for API access.
+    - For on-premise AppViewX, use `31443`.
+    - For SaaS, use `443`.
+
+- `log_level`:
+    - Describes the log level.
+    - Default is set to `INFO`.
+    - Possible values are [`INFO`, `DEBUG`].
+
+**Example environment variable usage:**
+```sh
+export APPVIEWX_TERRAFORM_CLIENT_ID="your_client_id"
+export APPVIEWX_TERRAFORM_CLIENT_SECRET="your_client_secret"
+export APPVIEWX_TERRAFORM_USERNAME="your_username"
+export APPVIEWX_TERRAFORM_PASSWORD="your_password"
+```
 
 ## Support
 For support, please contact [AppViewX Support](https://helpcenter.appviewx.com/login)
