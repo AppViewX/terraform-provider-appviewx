@@ -39,65 +39,27 @@ The `appviewx_certificate_push_akv` resource automates the creation of a certifi
 
 ### Mandatory parameters
 
-- **`assign_group`** (string): The name of the group to which the certificate belongs in AppViewX.
+- **`certificate_group_name`** (string): The name of the group to which the certificate belongs in AppViewX.
 
-- **`azure_account`** (string): The name of the AKV Device which was onboarded in AppViewX.
+- **`azure_account_name`** (string): The name of the AKV Device which was onboarded in AppViewX.
 
-- **`azure_key_vault`** (string): The name of the AKV Key Vault which was onboarded in AppViewX.
+- **`azure_key_vault_name`** (string): The name of the AKV Key Vault which was onboarded in AppViewX.
 
-- **`logged_in_username`** (string): The name of the user used to login in the AppViewX.
+- **`certificate_type`** (string): Describes the Certificate category. Possible Values: [`Server`, `Client`, `CodeSigning`]
 
-- **`cert_type`** (string): Describes the Certificate category. Possible Values: [`Server`, `Client`, `CodeSigning`]
-
-- **`ca`** (string): The name of the Certificate Authority (CA) to issue the certificate. Possible Values: [`AppViewX`, `Sectigo`, `OpenTrust`, `Microsoft Enterprise`, `DigiCert`]
+- **`certificate_authority`** (string): The name of the Certificate Authority (CA) to issue the certificate. Possible Values: [`AppViewX`, `Sectigo`, `OpenTrust`, `Microsoft Enterprise`, `DigiCert`]
 
 - **`validity_unit`** (string): The unit of validity for the certificate. Possible values are [`Days`, `Months`, `Years`].
 
 - **`validity_unit_value`** (string): The value for the validity unit
 
-- **`cn_uploadcsr`** (string): The domain name or identifier for the certificate.
+- **`common_name`** (string): The domain name or identifier for the certificate.
 
-- **`hash_uploadcsr`** (string): Describes the Hashing algorithm. Possible Values are [`SHA160`, `SHA224`, `SHA256`, `SHA384`, `SHA512`, `SHA3-224`, `SHA3-256`]
+- **`hash_algorithm`** (string): Describes the Hashing algorithm. Possible Values are [`SHA160`, `SHA224`, `SHA256`, `SHA384`, `SHA512`, `SHA3-224`, `SHA3-256`]
 
-- **`key_uploadcsr`** (string): The cryptographic algorithm for the key. Possible values are [`RSA`, `DSA`, `EC`]
+- **`key_type`** (string): The cryptographic algorithm for the key. Possible values are [`RSA`, `DSA`, `EC`]
 
-- **`bit_uploadcsr`** (string): The size of the key in bits. Possible values are [`1024`, `2048`, `3072`, `4096`, `7680`, `8192`].
-
-- **`entrust_cert_type`** (string): The Certificate Type that need to be enroll via Entrust.
-  NOTE:
-  - Mandatory Only for Entrust CA.
-  - For other CA's - mention as NA.
-
-- **`sectigo_cert_type`** (string): The Certificate Type that need to be enroll via Sectigo.
-  NOTE:
-  - Mandatory Only for Sectigo CA.
-  - For other CA's - mention as NA.
-
-- **`template_name`** (string): The Certificate Template name that need to be enroll via Microsoft Enterprise CA.
-  NOTE:
-  - Mandatory Only for Microsoft Enterprise CA.
-  - For other CA's - mention as NA.
-
-- **`digicert_division`** (string): The Digicert's Divison of the Certificate that need to be enroll via Sectigo.
-  NOTE:
-  - Mandatory Only for DigiCert CA.
-  - For other CA's - mention as NA.
-
-- **`digicert_cert_type`** (string): The Certificate Type that need to be enroll via Digicert.
-  NOTE:
-  - Mandatory Only for DigiCert CA.
-  - For other CA's - mention as NA.
-
-- **`digicert_server_type`** (string): The Server Type of the Certificate that need to be enroll via Digicert.
-  NOTE:
-  - Mandatory Only for DigiCert CA.
-  - For other CA's - mention as NA.
-
-- **`digicert_payment_method`** (string): The Payment method of the Certificate that need to be enroll via Digicert.
-  NOTE:
-  - Mandatory Only for DigiCert CA.
-  - For other CA's - mention as NA.
-
+- **`key_bit_length`** (string): The size of the key in bits. Possible values are [`1024`, `2048`, `3072`, `4096`, `7680`, `8192`].
 
 ## Example Usage
 
@@ -112,261 +74,25 @@ provider "appviewx" {
 
 resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
   field_info = jsonencode({
-    "assign_group": "Default",
-    "azure_account": "AKV",
-    "azure_key_vault": "KeyVault-AVX",
-    "logged_in_username": "avx@gmail.com",
-    "cert_type": "Server",
-    "ca": "AppViewX",
-    "entrust_cert_type": "NA",
-    "sectigo_cert_type": "NA",
-    "template_name":"NA",
-    "digicert_division": "NA",
-    "digicert_cert_type": "NA",
-    "digicert_server_type": "NA",
-    "digicert_payment_method": "NA",
+    "certificate_group_name": "Group1",
+    "azure_account_name": "AKV",
+    "azure_key_vault_name": "KeyVault-AVX",
+    "certificate_type": "Server",
+    "certificate_authority": "AppViewX",
     "validity_unit": "Days",
     "validity_unit_value": "4",
-    "cn_uploadcsr": "appviewxCertificate.certplus.in",
-    "dns_uploadcsr": "",
-    "org_uploadcsr": "",
-    "org_address": "",
-    "locality": "",
-    "org_unit": "",
-    "state": "",
-    "country": "",
-    "email_address": "",
-    "challenge_pwd": "",
-    "confirm_pwd": "",
-    "challenge_pwd_uploadcsr": "",
-    "confirm_pwd_uploadcsr": "",
-    "hash_uploadcsr": "SHA256",
-    "key_uploadcsr": "RSA",
-    "bit_uploadcsr": "2048",
-    "end_entity_username": "",
-    "prevalidation": "",
-    "isapiuser": "yes",
-    "D_Resp_exploitation-adresse": "",
-    "D_Demandeur-adresse": "",
-    "D_Demandeur": "",
-    "D_Serveur-nom": "",
-    "D_Serveur-IP": "",
-    "D_No_Projet": "",
-    "D_Commentaires": "",
-    "D_Casewise-Bizzdesign": "",
-    "D_VPTI_proprietaire": "",
-    "D_Contact_tech-adresse": "",
-    "D_Environnement": "",
-    "D_CT_Logs": "",
-    "D_infonuagique": "",
-    "D_En_Utilisation": "",
-    "D_Nom_Proprietaire_TI": "",
-    "D_Site_Externe": "",
-    "D_Notes_client": "",
-    "D_Numero_derogation": "",
-    "D_Localite": "Toronto"
+    "common_name": "appviewxCertificate.certplus.in",
+    "hash_algorithm": "SHA256",
+    "key_type": "RSA",
+    "key_bit_length": "2048"
   })
 
   resource "appviewx_create_push_certificate_request_status" "create_and_push_certificate_status" {
   request_id = appviewx_certificate_push_akv.create_and_push_certificate.workflow_id
   retry_count = 20
   retry_interval = 10
-  certificate_common_name = appviewx_certificate_push_akv.create_and_push_certificate.certificate_common_name
-  certificate_download_path = "</path/to/directory or /path/to/directory/filename>"
-  certificate_download_format = "CRT"
-  certificate_chain_required = true
-  is_download_required = true
   depends_on = [appviewx_certificate_push_akv.create_and_push_certificate]
 }
-}
-```
-
-
-### Certificate Creation with DigiCert CA
-
-```hcl
-resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
-  field_info = jsonencode({
-    "assign_group": "Default",
-    "azure_account": "AKV",
-    "azure_key_vault": "KeyVault-AVX",
-    "logged_in_username": "avx@gmail.com",
-    "cert_type": "Server",
-    "ca": "DigiCert",
-    "entrust_cert_type": "NA",
-    "sectigo_cert_type": "NA",
-    "template_name": "NA",
-    "digicert_division": "AppViewX",
-    "digicert_cert_type": "SSL",
-    "digicert_server_type": "Server1",
-    "digicert_payment_method": "balance",
-    "validity_unit": "Days",
-    "validity_unit_value": "365",
-    "cn_uploadcsr": "digicertCertificate.certplus.in",
-    "dns_uploadcsr": "",
-    "org_uploadcsr": "",
-    "org_address": "",
-    "locality": "",
-    "org_unit": "",
-    "state": "",
-    "country": "",
-    "email_address": "",
-    "challenge_pwd": "",
-    "confirm_pwd": "",
-    "challenge_pwd_uploadcsr": "",
-    "confirm_pwd_uploadcsr": "",
-    "hash_uploadcsr": "SHA256",
-    "key_uploadcsr": "RSA",
-    "bit_uploadcsr": "2048",
-    "end_entity_username": "",
-    "prevalidation": "",
-    "isapiuser": "yes",
-    "D_Resp_exploitation-adresse": "",
-    "D_Demandeur-adresse": "",
-    "D_Demandeur": "",
-    "D_Serveur-nom": "",
-    "D_Serveur-IP": "",
-    "D_No_Projet": "",
-    "D_Commentaires": "",
-    "D_Casewise-Bizzdesign": "",
-    "D_VPTI_proprietaire": "",
-    "D_Contact_tech-adresse": "",
-    "D_Environnement": "",
-    "D_CT_Logs": "",
-    "D_infonuagique": "",
-    "D_En_Utilisation": "",
-    "D_Nom_Proprietaire_TI": "",
-    "D_Site_Externe": "",
-    "D_Notes_client": "",
-    "D_Numero_derogation": "",
-    "D_Localite": "Montreal"
-  })
-}
-```
-
-### Certificate Creation with Microsoft Enterprise CA
-
-```hcl
-resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
-  field_info = jsonencode({
-    "assign_group": "Default",
-    "azure_account": "AKV",
-    "azure_key_vault": "KeyVault-AVX",
-    "logged_in_username": "avx@gmail.com",
-    "cert_type": "Server",
-    "ca": "Microsoft Enterprise",
-    "entrust_cert_type": "NA",
-    "sectigo_cert_type": "NA",
-    "template_name": "Server",
-    "digicert_division": "NA",
-    "digicert_cert_type": "NA",
-    "digicert_server_type": "NA",
-    "digicert_payment_method": "NA",
-    "validity_unit": "Years",
-    "validity_unit_value": "1",
-    "cn_uploadcsr": "MicrosoftCertificate.certplus.in",
-    "dns_uploadcsr": "",
-    "org_uploadcsr": "",
-    "org_address": "",
-    "locality": "",
-    "org_unit": "",
-    "state": "",
-    "country": "",
-    "email_address": "",
-    "challenge_pwd": "",
-    "confirm_pwd": "",
-    "challenge_pwd_uploadcsr": "",
-    "confirm_pwd_uploadcsr": "",
-    "hash_uploadcsr": "SHA256",
-    "key_uploadcsr": "RSA",
-    "bit_uploadcsr": "2048",
-    "end_entity_username": "",
-    "prevalidation": "",
-    "isapiuser": "yes",
-    "D_Resp_exploitation-adresse": "",
-    "D_Demandeur-adresse": "",
-    "D_Demandeur": "",
-    "D_Serveur-nom": "",
-    "D_Serveur-IP": "",
-    "D_No_Projet": "",
-    "D_Commentaires": "",
-    "D_Casewise-Bizzdesign": "",
-    "D_VPTI_proprietaire": "",
-    "D_Contact_tech-adresse": "",
-    "D_Environnement": "",
-    "D_CT_Logs": "",
-    "D_infonuagique": "",
-    "D_En_Utilisation": "",
-    "D_Nom_Proprietaire_TI": "",
-    "D_Site_Externe": "",
-    "D_Notes_client": "",
-    "D_Numero_derogation": "",
-    "D_Localite": "Toronto"
-}
-)
-}
-```
-
-### Certificate Creation with Sectigo CA
-
-```hcl
-resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
-  field_info = jsonencode({
-    "assign_group": "Default",
-    "azure_account": "AKV",
-    "azure_key_vault": "KeyVault-AVX",
-    "logged_in_username": "avx@gmail.com",
-    "cert_type": "Server",
-    "ca": "Sectigo",
-    "entrust_cert_type": "NA",
-    "sectigo_cert_type": "SSL Certificate",
-    "template_name": "NA",
-    "digicert_division": "NA",
-    "digicert_cert_type": "NA",
-    "digicert_server_type": "NA",
-    "digicert_payment_method": "NA",
-    "validity_unit": "Years",
-    "validity_unit_value": "1",
-    "cn_uploadcsr": "SectigoCertificate.certplus.in",
-    "dns_uploadcsr": "",
-    "org_uploadcsr": "",
-    "org_address": "",
-    "locality": "",
-    "org_unit": "",
-    "state": "",
-    "country": "",
-    "email_address": "",
-    "challenge_pwd": "",
-    "confirm_pwd": "",
-    "challenge_pwd_uploadcsr": "",
-    "confirm_pwd_uploadcsr": "",
-    "hash_uploadcsr": "SHA256",
-    "key_uploadcsr": "RSA",
-    "bit_uploadcsr": "2048",
-    "end_entity_username": "",
-    "prevalidation": "",
-    "isapiuser": "yes",
-    "D_Resp_exploitation-adresse": "",
-    "D_Demandeur-adresse": "",
-    "D_Demandeur": "",
-    "D_Serveur-nom": "",
-    "D_Serveur-IP": "",
-    "D_No_Projet": "",
-    "D_Commentaires": "",
-    "D_Casewise-Bizzdesign": "",
-    "D_VPTI_proprietaire": "",
-    "D_Contact_tech-adresse": "",
-    "D_Environnement": "",
-    "D_CT_Logs": "",
-    "D_infonuagique": "",
-    "D_En_Utilisation": "",
-    "D_Nom_Proprietaire_TI": "",
-    "D_Site_Externe": "",
-    "D_Notes_client": "",
-    "D_Numero_derogation": "",
-    "D_Localite": "Toronto"
-}
-)
 }
 ```
 

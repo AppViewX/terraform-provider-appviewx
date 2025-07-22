@@ -55,17 +55,10 @@ provider "appviewx" {
   appviewx_environment_is_https = true
 }
 
-resource "appviewx_revoke_certificate" "cert_revoke" {
-  serial_number = "<Certificate Serial Number>"
-  issuer_common_name = "AppViewX CA"
-  reason = "Superseded"
-  comments = "Certificate replaced"
-}
-
-resource "appviewx_revoke_certificate_request_status" "revoke_cert_status" {
-  request_id = appviewx_revoke_certificate.cert_revoke.request_id
-  retry_count = 30
-  retry_interval = 10
+resource "appviewx_search_certificate" "cert_search" {
+  category = "<Category>"
+  cert_serial_no = "<Certificate Serial Number>"
+  cert_issuer = "<Issuer Common Name>"
 }
 ```
 
