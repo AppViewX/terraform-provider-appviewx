@@ -37,6 +37,9 @@ The `appviewx_certificate_push_akv` resource automates the creation of a certifi
 - **`workflow_name`** (string):  
   The custom workflow name to execute the Create Certificate and Push to AKV Operation.
 
+### NOTE:
+- These mandatory and optional attributes might differ based on the custom workflow used in AppViewX.
+
 ### Mandatory parameters
 
 - **`certificate_group_name`** (string): The name of the group to which the certificate belongs in AppViewX.
