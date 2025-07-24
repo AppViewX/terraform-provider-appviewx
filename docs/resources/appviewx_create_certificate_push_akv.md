@@ -119,7 +119,7 @@ Response of the appviewx_certificate_push_akv resource
   "appStatusCode": null,
   "tags": null,
   "headers": {
-    "X-WorkFlowName": "Desjardins Create Certificate Push to AKV"
+    "X-WorkFlowName": "Create Certificate Push to AKV"
   }
 
 ```
