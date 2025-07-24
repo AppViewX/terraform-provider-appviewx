@@ -121,7 +121,6 @@ Response after pooling the status of the revoke request
 }
 ```
 
-
 ## Destroy
 
 To destroy the Certificate details in the Terraform State file, use:

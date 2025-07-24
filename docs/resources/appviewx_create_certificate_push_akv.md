@@ -99,6 +99,7 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
 }
 }
 ```
+
 ## Response of the Resource
 
 Response of the appviewx_certificate_push_akv resource
@@ -135,7 +136,6 @@ Final Response of this Request after pooling the Status of the Certificate Creat
   "workflow_id": "2645"
 }
 ```
-
 ## Destroy
 
 To destroy the Certificate details in the Terraform State file, use:

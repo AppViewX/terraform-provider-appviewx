@@ -65,6 +65,7 @@ resource "appviewx_search_certificate" "cert_search" {
 ```bash
   You will get the Certificate Meta data and parameters as a JSON.
 ```
+
 ## Destroy
 
 To destroy the Certificate details in the Terraform State file, use:

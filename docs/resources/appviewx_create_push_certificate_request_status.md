@@ -64,6 +64,7 @@ resource "appviewx_create_push_certificate_request_status" "create_and_push_cert
   is_download_required = true
 }
 ```
+
 ## Response
 
 Final Response of this Request after pooling the Status of the Certificate Creation and pushing to AKV process
@@ -94,6 +95,7 @@ If you specified the Download is needed, the response will be as below
   "workflow_id": "2022"
 }
 ```
+
 ## Destroy
 
 To destroy the Certificate details in the Terraform State file, use:
