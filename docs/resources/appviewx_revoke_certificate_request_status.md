@@ -44,19 +44,16 @@ resource "appviewx_revoke_certificate_request_status" "revoke_status" {
 
 ## Response
 
-Response for the 
+Response after pooling the status of the revoke request
 
 ```bash
+[CERTIFICATE REVOCATION][SUCCESS] ✅ Operation Result:
 {
-  "response": {
-    "message": "Revoke action triggered successfully.",
-    "resourceId": "68822e574d6c252835854461059",
-    "requestId": "2648"
-  },
-  "message": "Revoke action has been triggered successfully",
-  "appStatusCode": "SUCCESS",
-  "tags": {},
-  "headers": null
+  "completed_at": "<Timestamp>",
+  "operation": "Certificate Revocation",
+  "status": "Successful",
+  "status_code": 1,
+  "workflow_id": "2648"
 }
 ```
 
