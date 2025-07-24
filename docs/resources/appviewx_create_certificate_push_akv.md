@@ -59,7 +59,11 @@ The `appviewx_certificate_push_akv` resource automates the creation of a certifi
 
 - **`key_type`** (string): The cryptographic algorithm for the key. Possible values are [`RSA`, `DSA`, `EC`]
 
-- **`key_bit_length`** (string): The size of the key in bits. Possible values are [`1024`, `2048`, `3072`, `4096`, `7680`, `8192`].
+- **`key_bit_length`** (string): The size of the key in bits. Possible values are 
+  - RSA : [`1024`, `2048`, `3072`, `4096`, `7680`, `8192`].
+  - DSA : [`1024`, `2048`].
+  - EC : [`160`, `163`, `191`, `192`, `193`, `224`, `233`, `239`, `256`, `283`, `320`, `359`, `384`, `409`, `431`, `512`, `521`, `571`]
+  - ECDSA Curve : [`ECDSA Curve that appviewx is supporting`]
 
 ## Example Usage
 
@@ -76,12 +80,12 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
   field_info = jsonencode({
     "certificate_group_name": "Group1",
     "azure_account_name": "AKV",
-    "azure_key_vault_name": "KeyVault-AVX",
+    "azure_key_vault_name": "KeyVault",
     "certificate_type": "Server",
-    "certificate_authority": "AppViewX",
+    "certificate_authority": "AppViewX Certificate Authority",
     "validity_unit": "Days",
     "validity_unit_value": "4",
-    "common_name": "appviewxCertificate.certplus.in",
+    "common_name": "appviewxCertificate.xxxxx.yy",
     "hash_algorithm": "SHA256",
     "key_type": "RSA",
     "key_bit_length": "2048"
@@ -90,22 +94,47 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
   resource "appviewx_create_push_certificate_request_status" "create_and_push_certificate_status" {
   request_id = appviewx_certificate_push_akv.create_and_push_certificate.workflow_id
   retry_count = 20
-  retry_interval = 10
+  retry_interval = 20
   depends_on = [appviewx_certificate_push_akv.create_and_push_certificate]
 }
 }
 ```
+## Response of the Resource
 
-## Import
-
-To import an existing workflow request into the Terraform state, use:
+Response of the appviewx_certificate_push_akv resource
 
 ```bash
-terraform import appviewx_certificate_push_akv.create_and_push_certificate <workflow_id>
-```
-Replace `<workflow_id>` with the actual workflow request ID.
+{
+  "response": {
+    "workorderId": "0",
+    "requestType": "sample",
+    "requestId": "2642",
+    "workflowVersion": "version1",
+    "message": "Workflow Request is created with Id 2642 . Request submitted to workflow engine for processing workorder.",
+    "status": "In Progress",
+    "statusCode": 0
+  },
+  "message": "Success",
+  "appStatusCode": null,
+  "tags": null,
+  "headers": {
+    "X-WorkFlowName": "Desjardins Create Certificate Push to AKV"
+  }
 
----
+```
+
+Final Response of this Request after pooling the Status of the Certificate Creation and pushing to AKV process
+
+```bash
+[CERTIFICATE CREATION][SUCCESS] ✅ Operation Result:
+{
+  "completed_at": "<Timestamp>",
+  "operation": "Certificate Creation and Push",
+  "status": "Successful",
+  "status_code": 1,
+  "workflow_id": "2645"
+}
+```
 
 ## Destroy
 

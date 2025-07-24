@@ -30,7 +30,7 @@ The `appviewx_search_certificate` resource allows you to search for certificates
   - CodeSigning
 
 - **`cert_serial_no`** (string):  
-  Certificate serial number to search for. (e.g., `D1:CF:81:B0:43:8E:B3:D7:F6:CE:16:58:0B:82:E5:4F`)
+  Certificate serial number to search for. (e.g., `A1:CF:81:B0:23:8E:B3:D7:H2:CE:16:58:0B:82:G5:4F`)
 
 - **`cert_issuer`** (string):  
   Certificate Issuer Common Name to search for.
@@ -61,18 +61,10 @@ resource "appviewx_search_certificate" "cert_search" {
   cert_issuer = "<Issuer Common Name>"
 }
 ```
-
-## Import
-
-To import an existing search into the Terraform state, use:
-
+## Response
 ```bash
-terraform import appviewx_search_certificate_by_keyword.search_cert <search_id>
+  You will get the Certificate Meta data and parameters as a JSON.
 ```
-Replace `<search_id>` with the unique identifier for your search (typically based on the category).
-
----
-
 ## Destroy
 
 To destroy the Certificate details in the Terraform State file, use:

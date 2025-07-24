@@ -29,9 +29,11 @@ The `appviewx_create_push_certificate_request_status` resource is used to poll t
 
 - **`retry_count`** (int):  
   Number of times to retry checking workflow status (default: 10).
+  Reasonable values - 10 and above
 
 - **`retry_interval`** (int):  
   Seconds to wait between retry attempts (default: 20).
+  Reasonable values - 20 and above
 
 - **`certificate_common_name`** (string):  
   Common name of the certificate (optional, for download naming).
@@ -62,18 +64,36 @@ resource "appviewx_create_push_certificate_request_status" "create_and_push_cert
   is_download_required = true
 }
 ```
+## Response
 
-## Import
-
-To import an existing workflow status into the Terraform state, use:
+Final Response of this Request after pooling the Status of the Certificate Creation and pushing to AKV process
 
 ```bash
-terraform import appviewx_create_push_certificate_request_status.create_and_push_certificate_status <workflow_id>
+[CERTIFICATE CREATION][SUCCESS] ✅ Operation Result:
+{
+  "completed_at": "<Timestamp>",
+  "operation": "Certificate Creation and Push",
+  "status": "Successful",
+  "status_code": 1,
+  "workflow_id": "2021"
+}
 ```
-Replace `<workflow_id>` with the actual workflow request ID.
 
----
+If you specified the Download is needed, the response will be as below
 
+```bash
+[CERTIFICATE CREATION][SUCCESS] ✅ Operation Result:
+{
+  "certificate_common_name": "aaa.xxx.yy",
+  "certificate_download_path": "<Certificate downloaded path>",
+  "completed_at": "<Timestamp>",
+  "operation": "Certificate Creation and Push",
+  "resource_id": "688kj4nk4nk4hrknvg",
+  "status": "Successful",
+  "status_code": 1,
+  "workflow_id": "2022"
+}
+```
 ## Destroy
 
 To destroy the Certificate details in the Terraform State file, use:
