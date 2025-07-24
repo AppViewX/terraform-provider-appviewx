@@ -33,8 +33,7 @@ func ResourceCertificatePushAKV() *schema.Resource {
 			},
 			"workflow_name": {
 				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     "Desjardins Create Certificate Push to AKV",
+				Required:    true,
 				Description: "The workflow name to execute",
 			},
 			"status_code": {

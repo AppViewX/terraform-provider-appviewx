@@ -32,8 +32,6 @@ The `appviewx_certificate_push_akv` resource automates the creation of a certifi
 - **`field_info`** (string, sensitive):  
   JSON string containing all certificate and key vault configuration.  
 
-### Optional Attributes
-
 - **`workflow_name`** (string):  
   The custom workflow name to execute the Create Certificate and Push to AKV Operation.
 
@@ -93,6 +91,7 @@ resource "appviewx_certificate_push_akv" "create_and_push_certificate" {
     "key_type": "RSA",
     "key_bit_length": "2048"
   })
+  workflow_name = "Create Cert Workflow"
 
   resource "appviewx_create_push_certificate_request_status" "create_and_push_certificate_status" {
   request_id = appviewx_certificate_push_akv.create_and_push_certificate.workflow_id
