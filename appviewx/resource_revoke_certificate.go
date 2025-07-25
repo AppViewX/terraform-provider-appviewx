@@ -49,6 +49,11 @@ func ResourceRevokeCertificate() *schema.Resource {
 				}, false),
 				Description: "Reason for certificate revocation",
 			},
+			"resource_id_hook": {
+				Type:        schema.TypeString,
+				Required:    true,
+				Description: "Resource ID hook for the certificate to revoke",
+			},
 			"comments": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -131,11 +136,12 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 	// Get serial number and issuer common name from config
 	serialNumber := d.Get("serial_number").(string)
 	issuerCommonName := d.Get("issuer_common_name").(string)
+	resourceIdHook := d.Get("resource_id_hook").(string)
 
 	logger.Info("🔍 Looking up certificate with serial: %s and issuer: %s", serialNumber, issuerCommonName)
 
 	// Step 1: Call the execute-hook API to get resource ID
-	resourceId, err := getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxEnvironmentIsHTTPS, appviewxSessionID, accessToken, serialNumber, issuerCommonName)
+	resourceId, err := getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxEnvironmentIsHTTPS, appviewxSessionID, accessToken, serialNumber, issuerCommonName, resourceIdHook)
 	if err != nil {
 		logger.Error("❌ Error retrieving resource ID:")
 		logger.Error("   ", err)
@@ -298,12 +304,12 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 }
 
 // getResourceIdBySerialAndIssuer calls the execute-hook API to get the resource ID
-func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPort string, appviewxEnvironmentIsHTTPS bool, appviewxSessionID, accessToken, serialNumber, issuerCommonName string) (string, error) {
+func getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPort string, appviewxEnvironmentIsHTTPS bool, appviewxSessionID, accessToken, serialNumber, issuerCommonName, resourceIdHook string) (string, error) {
 	// Create payload for execute-hook API
 	payload := map[string]interface{}{
 		"payload": map[string]interface{}{
 			"hook": map[string]interface{}{
-				"name": "Desjardins - Get Resource Id",
+				"name": resourceIdHook,
 			},
 			"input": map[string]interface{}{
 				"serial_number":      serialNumber,

@@ -51,6 +51,9 @@ The `appviewx_revoke_certificate` resource allows you to revoke an existing cert
   - Superseded
   - Cessation of operation
 
+- **`resource_id_hook`** (string):  
+  - Certificate Resource ID Hook Name for revocation
+
 ### Optional Attributes
 
 - **`comments`** (string):  
@@ -64,6 +67,7 @@ resource "appviewx_revoke_certificate" "revoke_cert" {
   issuer_common_name = "<Issuer Common Name>"
   reason             = "Key compromise"
   comments           = "Revoked due to key compromise"
+  resource_id_hook = "Get Resource Id"
 }
 ```
 
@@ -81,6 +85,7 @@ resource "appviewx_revoke_certificate" "cert_revoke" {
   issuer_common_name = "AppViewX Certificate Authority"
   reason = "Superseded"
   comments = "Certificate replaced"
+  resource_id_hook = "Get Resource Id"
 }
 
 resource "appviewx_revoke_certificate_request_status" "revoke_cert_status" {
