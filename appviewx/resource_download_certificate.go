@@ -156,10 +156,12 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 // getPasswordWithPriority returns password with provider priority over resource
 func getPasswordWithPriority(providerPassword, resourcePassword string) string {
 	if providerPassword != "" {
+		log.Println("[INFO] -------------------Provider password is considered------------------")
 		log.Println("[INFO] Using provider-level password")
 		return providerPassword
 	}
 	if resourcePassword != "" {
+		log.Println("[INFO] -------------------Resource password is considered------------------")
 		log.Println("[INFO] Using resource-level password")
 		return resourcePassword
 	}
