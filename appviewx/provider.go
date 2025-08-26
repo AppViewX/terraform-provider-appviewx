@@ -58,9 +58,21 @@ func Provider() *schema.Provider {
 				Default:     "INFO",
 				Description: "Log level (DEBUG, INFO)",
 				ValidateFunc: validation.StringInSlice([]string{
-                    "DEBUG", "INFO",
-                }, false),
-            },
+					"DEBUG", "INFO",
+				}, false),
+			},
+			constants.CERTIFICATE_DOWNLOAD_PASSWORD: {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Default certificate download password (provider level) - takes priority over resource level",
+			},
+			constants.KEY_DOWNLOAD_PASSWORD: {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Default key download password (provider level) - takes priority over resource level",
+			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"appviewx_automation":                             ResourceAutomationServer(),
@@ -78,13 +90,15 @@ func Provider() *schema.Provider {
 
 func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	appviewxEnvironment := config.AppViewXEnvironment{
-		AppViewXUserName:        d.Get(constants.APPVIEWX_USERNAME).(string),
-		AppViewXPassword:        d.Get(constants.APPVIEWX_PASSWORD).(string),
-		AppViewXClientId:        d.Get(constants.APPVIEWX_CLIENT_ID).(string),
-		AppViewXClientSecret:    d.Get(constants.APPVIEWX_CLIENT_SECRET).(string),
-		AppViewXEnvironmentIP:   d.Get(constants.APPVIEWX_ENVIRONMENT_IP).(string),
-		AppViewXEnvironmentPort: d.Get(constants.APPVIEWX_ENVIRONMENT_PORT).(string),
-		AppViewXIsHTTPS:         d.Get(constants.APPVIEWX_ENVIRONMENT_Is_HTTPS).(bool),
+		AppViewXUserName:             d.Get(constants.APPVIEWX_USERNAME).(string),
+		AppViewXPassword:             d.Get(constants.APPVIEWX_PASSWORD).(string),
+		AppViewXClientId:             d.Get(constants.APPVIEWX_CLIENT_ID).(string),
+		AppViewXClientSecret:         d.Get(constants.APPVIEWX_CLIENT_SECRET).(string),
+		AppViewXEnvironmentIP:        d.Get(constants.APPVIEWX_ENVIRONMENT_IP).(string),
+		AppViewXEnvironmentPort:      d.Get(constants.APPVIEWX_ENVIRONMENT_PORT).(string),
+		AppViewXIsHTTPS:              d.Get(constants.APPVIEWX_ENVIRONMENT_Is_HTTPS).(bool),
+		ProviderCertDownloadPassword: d.Get(constants.CERTIFICATE_DOWNLOAD_PASSWORD).(string),
+		ProviderKeyDownloadPassword:  d.Get(constants.KEY_DOWNLOAD_PASSWORD).(string),
 	}
 
 	logLevel := d.Get("log_level").(string)

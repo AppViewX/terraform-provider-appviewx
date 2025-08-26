@@ -41,8 +41,10 @@ func ResourceDownloadCertificateServer() *schema.Resource {
 				Optional: true,
 			},
 			constants.CERTIFICATE_DOWNLOAD_PASSWORD: &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Password for certificate download (resource level) - provider level password takes priority",
 			},
 			constants.CERTIFICATE_CHAIN_REQUIRED: &schema.Schema{
 				Type:     schema.TypeBool,
@@ -53,8 +55,10 @@ func ResourceDownloadCertificateServer() *schema.Resource {
 				Optional: true,
 			},
 			constants.KEY_DOWNLOAD_PASSWORD: &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Password for private key download (resource level) - provider level password takes priority",
 			},
 			constants.DOWNLOAD_PASSWORD_PROTECTED_KEY: &schema.Schema{
 				Type:     schema.TypeBool,
@@ -102,7 +106,24 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 	var isChainRequired, ok bool
 	downloadFormat = GetDownloadFormat(resourceData)
 	downloadPath = GetDownloadFilePath(resourceData, commonName, downloadFormat)
-	if downloadPassword, ok = GetDownloadPassword(resourceData, downloadFormat); !ok {
+
+	// Get certificate download password with provider priority
+	providerCertPassword := configAppViewXEnvironment.ProviderCertDownloadPassword
+	resourceCertPassword := resourceData.Get(constants.CERTIFICATE_DOWNLOAD_PASSWORD).(string)
+	downloadPassword = getPasswordWithPriority(providerCertPassword, resourceCertPassword)
+
+	// Validate password for formats that require it
+	if downloadPassword == "" && (downloadFormat == "PFX" || downloadFormat == "JKS" || downloadFormat == "P12") {
+		log.Println("[ERROR] Password not found for the specified download format - " + downloadFormat)
+		return errors.New("[ERROR] Password not found for the specified download format - " + downloadFormat)
+	} else if downloadPassword != "" && (downloadFormat == "PFX" || downloadFormat == "JKS" || downloadFormat == "P12") {
+		log.Println("[INFO] Password found for download format - " + downloadFormat)
+		ok = true
+	} else {
+		ok = true
+	}
+
+	if !ok {
 		return errors.New("[ERROR] Error in getting the download password")
 	}
 	isChainRequired = resourceData.Get(constants.CERTIFICATE_CHAIN_REQUIRED).(bool)
@@ -125,9 +146,58 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 	}
 	if resourceData.Get(constants.KEY_DOWNLOAD_PATH) != "" {
 		log.Println("[INFO] Key download path is provided in the payload hence proceeding with key download")
-		if err := downloadKey(resourceData, resourceId, appviewxSessionID, accessToken, configAppViewXEnvironment); err != nil {
+		if err := downloadKeyWithPriority(resourceData, resourceId, appviewxSessionID, accessToken, configAppViewXEnvironment); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// getPasswordWithPriority returns password with provider priority over resource
+func getPasswordWithPriority(providerPassword, resourcePassword string) string {
+	if providerPassword != "" {
+		log.Println("[INFO] Using provider-level password")
+		return providerPassword
+	}
+	if resourcePassword != "" {
+		log.Println("[INFO] Using resource-level password")
+		return resourcePassword
+	}
+	log.Println("[INFO] No password provided at provider or resource level")
+	return ""
+}
+
+// downloadKeyWithPriority downloads key using provider-level password priority
+func downloadKeyWithPriority(resourceData *schema.ResourceData, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) error {
+	commonName := resourceData.Get(constants.COMMON_NAME).(string)
+	downloadPath := GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
+
+	// Get key download password with provider priority
+	providerKeyPassword := configAppViewXEnvironment.ProviderKeyDownloadPassword
+	resourceKeyPassword := resourceData.Get(constants.KEY_DOWNLOAD_PASSWORD).(string)
+	downloadPassword := getPasswordWithPriority(providerKeyPassword, resourceKeyPassword)
+
+	downloadPasswordProtectedKey := resourceData.Get(constants.DOWNLOAD_PASSWORD_PROTECTED_KEY).(bool)
+
+	if downloadPassword == "" {
+		log.Println("[ERROR] Password not found for private key download at provider or resource level")
+		return errors.New("[ERROR] Password not found for private key download at provider or resource level")
+	}
+
+	// Use the existing downloadKeyFromAppviewx function with the priority-based password
+	searchResponse := searchCertificate(resourceID, appviewxSessionID, accessToken, configAppViewXEnvironment)
+	if searchResponse.AppviewxResponse.ResponseObject.Objects != nil && searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID == "" {
+		log.Println("[ERROR] Cannot find the UUID for the resource id " + resourceID + " to proceed with key download")
+		return errors.New("[ERROR] Certificate details was not found to download the private key")
+	}
+	uuid := searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID
+	log.Println("[INFO] UUID for the resource id " + resourceID + " was obtained successfully")
+	if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+		log.Println("[INFO] Private key downloaded successfully in the specified path")
+		resourceData.SetId(strconv.Itoa(rand.Int()))
+	} else {
+		log.Println("[ERROR] Private key was not downloaded in the specified path")
+		return errors.New("[ERROR] Private key was not downloaded in the specified path")
 	}
 	return nil
 }
