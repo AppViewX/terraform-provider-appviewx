@@ -37,7 +37,7 @@ provider "appviewx" {
 }
 ```
 
-## Atrributes
+## Attributes
 
 - `appviewx_username`:
     - The username used to authenticate with the AppViewX API.
