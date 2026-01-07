@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"regexp"
@@ -20,7 +21,6 @@ import (
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
 	"terraform-provider-appviewx/appviewx/logger"
-
 )
 
 // Status code constants
@@ -146,17 +146,15 @@ func CreatePushCertificateRequestStatus() *schema.Resource {
 				Description: "Path to download the certificate to",
 			},
 			"certificate_download_format": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "CRT",
-				// ForceNew:    true,
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "CRT",
 				Description: "Format for the downloaded certificate (e.g., CRT, PFX)",
 			},
 			"certificate_chain_required": {
-				Type:     schema.TypeBool,
-				Optional: true,
-				Default:  true,
-				// ForceNew:    true,
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     true,
 				Description: "Whether to include the certificate chain in the download",
 			},
 			"downloaded_certificate_path": {
@@ -173,6 +171,111 @@ func CreatePushCertificateRequestStatus() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 				Description: "Serial number of the certificate",
+			},
+			"certificate_resource_id": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate resource ID in AppViewX",
+			},
+			"key_vault_name": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Azure Key Vault resource ID where the certificate is stored",
+			},
+			"key_vault_secret_name": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Name of the secret in Azure Key Vault",
+			},
+			// Certificate Metadata
+			"subject_alternative_names": {
+				Type:        schema.TypeList,
+				Computed:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
+				Description: "List of Subject Alternative Names (SANs)",
+			},
+			"validity_period": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate validity period duration",
+			},
+			"issuer": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate Authority or issuer name",
+			},
+			"certificate_status": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Current certificate status (e.g., issued, pending, revoked)",
+			},
+			// Timestamps
+			"issued_at": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Timestamp when the certificate was issued",
+			},
+			"expires_at": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate expiry timestamp",
+			},
+			// Epoch timestamps (Unix time in milliseconds)
+			"issued_at_epoch": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "Unix timestamp when the certificate was issued (milliseconds)",
+			},
+			"expires_at_epoch": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "Unix timestamp when the certificate expires (milliseconds)",
+			},
+			"created_time_epoch": {
+				Type:        schema.TypeInt,
+				Computed:    true,
+				Description: "Unix timestamp when the workflow was created (milliseconds)",
+			},
+			// Additional certificate details
+			"key_algorithm": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Key algorithm and size (e.g., RSA 2048)",
+			},
+			"signature_algorithm": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Signature algorithm used",
+			},
+			"thumbprint": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate thumbprint",
+			},
+			"certificate_uuid": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate UUID in the system",
+			},
+			"certificate_authority": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate Authority name",
+			},
+			"key_usage": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate key usage",
+			},
+			"extended_key_usage": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate extended key usage",
+			},
+			"certificate_expiry_status": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "Certificate expiry status (e.g., Active, Revoked, Expired)",
 			},
 		},
 		Importer: &schema.ResourceImporter{
@@ -191,9 +294,624 @@ func createPushCertificateRequestStatusRead(d *schema.ResourceData, m interface{
 }
 
 func createPushCertificateRequestStatusDelete(d *schema.ResourceData, m interface{}) error {
-	logger.Info(" **************** DELETE OPERATION FOR WORKFLOW LOGS **************** ")
-	// Since this is a read-only resource, deletion just removes it from state
+	logger.Info(" **************** DELETE OPERATION - TRIGGERING CERTIFICATE REVOCATION **************** ")
+
+	// Get certificate resource ID from state (we already have it!)
+	resourceId := ""
+	certificateCommonName := ""
+	serialNumber := ""
+
+	if rid, ok := d.GetOk("certificate_resource_id"); ok {
+		resourceId = rid.(string)
+	}
+	if cn, ok := d.GetOk("certificate_common_name"); ok {
+		certificateCommonName = cn.(string)
+	}
+	if sn, ok := d.GetOk("certificate_serial_number"); ok {
+		serialNumber = sn.(string)
+	}
+
+	// Check if we have the required information for revocation
+	if resourceId == "" {
+		logger.Warn("Cannot trigger certificate revocation - missing certificate resource ID in state")
+		logger.Info("Proceeding with state cleanup only")
+		d.SetId("")
+		return nil
+	}
+
+	logger.Info("Triggering certificate revocation using resource ID from state:")
+	logger.Info(" - Certificate: %s", certificateCommonName)
+	logger.Info(" - Serial Number: %s", serialNumber)
+	logger.Info(" - Resource ID: %s", resourceId)
+
+	// Call the simplified revocation function using resource ID directly
+	err := revokeCertificateDirectly(resourceId, d, m)
+	if err != nil {
+		logger.Error("Failed to revoke certificate: %v", err)
+		// Don't return error - we still want to clean up the state
+		logger.Info("Proceeding with state cleanup despite revocation failure")
+	} else {
+		logger.Info("Certificate revocation completed successfully")
+	}
+
+	// Remove from state regardless of revocation result
 	d.SetId("")
+	return nil
+}
+
+// revokeCertificateDirectly revokes a certificate using the resource ID directly from state
+func revokeCertificateDirectly(resourceId string, d *schema.ResourceData, m interface{}) error {
+	logger.Info("=== CERTIFICATE REVOCATION USING RESOURCE ID ===")
+	logger.Info(" - Resource ID: %s", resourceId)
+
+	// Get AppViewX configuration
+	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
+	appviewxUserName := configAppViewXEnvironment.AppViewXUserName
+	appviewxPassword := configAppViewXEnvironment.AppViewXPassword
+	appviewxClientId := configAppViewXEnvironment.AppViewXClientId
+	appviewxClientSecret := configAppViewXEnvironment.AppViewXClientSecret
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+	appviewxGwSource := "external"
+
+	// Authenticate using either username/password or client ID/secret
+	var appviewxSessionID, accessToken string
+	var err error
+
+	if appviewxUserName != "" && appviewxPassword != "" {
+		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			logger.Error("Error in getting the session: %v", err)
+			return err
+		}
+		logger.Info("Successfully authenticated using session ID")
+	} else if appviewxClientId != "" && appviewxClientSecret != "" {
+		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			logger.Error("Error in getting the access token: %v", err)
+			return err
+		}
+		logger.Info("Successfully authenticated using access token")
+	} else {
+		return fmt.Errorf("authentication failed - provide either username/password or client ID/secret")
+	}
+
+	// Build revocation payload using resource ID directly
+	payload := map[string]interface{}{
+		"resourceId": resourceId,
+		"reason":     "Cessation of operation", // Standard reason for destroy operations
+		"comments":   "Automatic revocation triggered by Terraform destroy",
+	}
+
+	// Set query parameters
+	queryParams := map[string]string{
+		"gwsource": appviewxGwSource,
+	}
+
+	// Get URL for the revoke endpoint
+	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "certificate/revoke", queryParams, appviewxEnvironmentIsHTTPS)
+	logger.Debug("🌐 Revoking certificate using URL: %s", url)
+
+	// Prepare the request
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		logger.Error("Error marshalling payload: %v", err)
+		return err
+	}
+
+	// Log the request for debugging
+	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
+	logger.Debug("📝 Revocation payload:\n%s\n", string(payloadBytes))
+
+	// Create HTTP client and request
+	client := &http.Client{Transport: HTTPTransport()}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		logger.Error("Error creating request: %v", err)
+		return err
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Add authentication header
+	if appviewxSessionID != "" {
+		logger.Debug("🔑 Using session ID for authentication")
+		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
+	} else if accessToken != "" {
+		logger.Debug("🔑 Using access token for authentication")
+		req.Header.Set(constants.TOKEN, accessToken)
+	}
+
+	// Make the request
+	logger.Info("📤 Sending certificate revocation request...")
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("Error making revocation request: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	logger.Info("📊 Certificate revocation response status: %s", resp.Status)
+
+	// Read response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("Error reading response: %v", err)
+		return err
+	}
+
+	// Format and log JSON response
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, responseBody, "", "  "); err == nil {
+		logger.Info("📦 Revocation response:\n%s\n", prettyJSON.String())
+	} else {
+		logger.Info("📦 Revocation response (raw):\n%s\n", string(responseBody))
+	}
+
+	// Parse response to extract request ID for status monitoring
+	var requestId string
+	var responseObj map[string]interface{}
+	if err := json.Unmarshal(responseBody, &responseObj); err == nil {
+		logger.Info("🔍 Parsed response object successfully")
+
+		// Debug: Print the top-level keys
+		logger.Info("📋 Top-level response keys:")
+		for key := range responseObj {
+			logger.Info("   - %s", key)
+		}
+
+		// Try to extract request ID from response.requestId
+		if response, ok := responseObj["response"].(map[string]interface{}); ok {
+			logger.Info("🔍 Found 'response' object, checking for requestId")
+			if reqId, ok := response["requestId"].(string); ok && reqId != "" {
+				requestId = reqId
+				logger.Info("🔑 Found request ID: %s", requestId)
+			} else {
+				logger.Info("⚠️ No 'requestId' found in response object")
+				// Debug: Print response object keys
+				logger.Info("📋 Response object keys:")
+				for key := range response {
+					logger.Info("   - %s", key)
+				}
+			}
+		} else {
+			logger.Info("⚠️ No 'response' object found in top-level response")
+		}
+
+		// Try alternative fields if standard didn't work
+		if requestId == "" {
+			possibleFields := []string{"requestId", "request_id", "id", "workflowId", "workflow_id"}
+			for _, field := range possibleFields {
+				if reqId, ok := responseObj[field].(string); ok && reqId != "" {
+					requestId = reqId
+					logger.Info("🔑 Found request ID in field '%s': %s", field, requestId)
+					break
+				}
+			}
+		}
+	} else {
+		logger.Error("❌ Failed to parse JSON response: %v", err)
+	}
+
+	// Check if revocation was successful
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		logger.Info("✅ Certificate revocation request submitted successfully")
+
+		// If we have a request ID, start status monitoring using the existing polling logic
+		if requestId != "" {
+			logger.Info("🔄 Starting revocation status monitoring...")
+			err := monitorRevocationStatus(requestId, d, m)
+			if err != nil {
+				logger.Error("❌ Error during status monitoring: %v", err)
+				// Don't fail the operation - revocation was submitted successfully
+			}
+		} else {
+			logger.Warn("⚠️ No request ID found - cannot monitor revocation status")
+		}
+
+		return nil
+	} else {
+		logger.Error("❌ Certificate revocation failed with status: %s", resp.Status)
+		return fmt.Errorf("certificate revocation failed with status %s: %s", resp.Status, string(responseBody))
+	}
+}
+
+// monitorRevocationStatus monitors revocation workflow status using the same logic as resource_revoke_certificate_request_status.go
+func monitorRevocationStatus(requestId string, d *schema.ResourceData, m interface{}) error {
+	logger.Info("🔄 Starting revocation status monitoring for request ID: %s", requestId)
+
+	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
+
+	// Use the same retry settings as resource_revoke_certificate_request_status.go
+	retryCount := 10
+	retryInterval := 20 // seconds
+
+	appviewxUserName := configAppViewXEnvironment.AppViewXUserName
+	appviewxPassword := configAppViewXEnvironment.AppViewXPassword
+	appviewxClientId := configAppViewXEnvironment.AppViewXClientId
+	appviewxClientSecret := configAppViewXEnvironment.AppViewXClientSecret
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+	appviewxGwSource := "external"
+
+	var completed bool = false
+	var finalStatusCode int = STATUS_IN_PROGRESS
+
+	// Start polling loop - same as resource_revoke_certificate_request_status.go
+	for attempt := 1; attempt <= retryCount; attempt++ {
+		logger.Info("🔍 Polling attempt %d/%d for revocation request ID: %s", attempt, retryCount, requestId)
+
+		// Get authentication token for this request
+		appviewxSessionID, accessToken, err := authenticate(
+			appviewxUserName, appviewxPassword,
+			appviewxClientId, appviewxClientSecret,
+			appviewxEnvironmentIP, appviewxEnvironmentPort,
+			appviewxEnvironmentIsHTTPS)
+
+		if err != nil {
+			logger.Error("❌ Authentication failed on polling attempt %d: %v", attempt, err)
+			if attempt == retryCount {
+				return fmt.Errorf("authentication failed after %d attempts: %v", retryCount, err)
+			}
+			time.Sleep(time.Duration(retryInterval) * time.Second)
+			continue
+		}
+
+		// Poll the workflow status using the existing function
+		_, respBody, err := pollWorkflowStatus(
+			appviewxEnvironmentIP, appviewxEnvironmentPort,
+			appviewxEnvironmentIsHTTPS, appviewxSessionID,
+			accessToken, requestId, appviewxGwSource)
+
+		if err != nil {
+			logger.Error("❌ Failed to poll workflow status on attempt %d: %v", attempt, err)
+			if attempt == retryCount {
+				return fmt.Errorf("failed to poll workflow status after %d attempts: %v", retryCount, err)
+			}
+			time.Sleep(time.Duration(retryInterval) * time.Second)
+			continue
+		}
+
+		// Parse the response
+		var responseObj map[string]interface{}
+		if err := json.Unmarshal(respBody, &responseObj); err != nil {
+			logger.Error("❌ Failed to parse response JSON on attempt %d: %v", attempt, err)
+			if attempt == retryCount {
+				return fmt.Errorf("failed to parse response: %v", err)
+			}
+			time.Sleep(time.Duration(retryInterval) * time.Second)
+			continue
+		}
+
+		// Check if the workflow has completed using the existing function
+		finalStatusCode, completed = getWorkflowStatusCode(responseObj)
+
+		if completed {
+			logger.Info("✅ Revocation workflow completed with status code: %d", finalStatusCode)
+
+			// Check success/failure
+			isSuccess := finalStatusCode == STATUS_SUCCESS
+
+			// Pretty logging for success or failure - same as resource_revoke_certificate_request_status.go
+			var failureReason string = ""
+
+			if resp, ok := responseObj["response"].(map[string]interface{}); ok {
+				if requestList, ok := resp["requestList"].([]interface{}); ok && len(requestList) > 0 {
+					if firstRequest, ok := requestList[0].(map[string]interface{}); ok {
+
+						if isSuccess {
+							// Create a success summary with safe handling of resource_id
+							successData := map[string]interface{}{
+								"operation":    "Certificate Revocation",
+								"status":       "Successful",
+								"workflow_id":  requestId,
+								"status_code":  finalStatusCode,
+								"completed_at": time.Now().Format(time.RFC3339),
+							}
+
+							// Add certificate resource ID if available from state
+							if resourceId, ok := d.GetOk("certificate_resource_id"); ok {
+								successData["certificate_resource_id"] = resourceId.(string)
+							}
+
+							successJSON, _ := json.MarshalIndent(successData, "", "  ")
+							successMessage := fmt.Sprintf("\n[CERTIFICATE REVOCATION][SUCCESS] ✅ Operation Result:\n%s\n", string(successJSON))
+							log.Println(successMessage)
+							logger.Info("🎉 Certificate revocation completed successfully!")
+
+						} else if completed {
+							// Create a failure summary for completed but failed workflows
+							failureData := map[string]interface{}{
+								"operation":    "Certificate Revocation",
+								"status":       "Failed",
+								"workflow_id":  requestId,
+								"status_code":  finalStatusCode,
+								"completed_at": time.Now().Format(time.RFC3339),
+							}
+
+							// Add failure reason if available
+							if tasks, ok := firstRequest["tasks"].([]interface{}); ok {
+								_, _, failureReason = processTasks(tasks, isSuccess)
+
+								if failureReason != "" && failureReason != "No specific failure reason found in logs" {
+									failureData["failure_reason"] = failureReason
+								} else {
+									// Try to find failure info directly in the workflow response
+									if message, ok := firstRequest["message"].(string); ok && message != "" {
+										if containsAny(message, []string{"Failed", "Error", "failed", "error"}) {
+											failureReason = message
+											failureData["failure_reason"] = failureReason
+										}
+									}
+
+									// If still no reason, check if there's a tooltip
+									if tooltip, ok := firstRequest["toolTip"].(string); ok && tooltip != "" {
+										failureReason = tooltip
+										failureData["failure_reason"] = failureReason
+									}
+								}
+							}
+
+							failureJSON, _ := json.MarshalIndent(failureData, "", "  ")
+							failureMessage := fmt.Sprintf("\n[CERTIFICATE REVOCATION][FAILURE] ❌ Operation Result:\n%s\n", string(failureJSON))
+							log.Println(failureMessage)
+							logger.Warn("⚠️ Certificate revocation failed with status: %d", finalStatusCode)
+						}
+
+						// Process tasks and extract failure information if needed - for detailed logging
+						if tasks, ok := firstRequest["tasks"].([]interface{}); ok {
+							// Log how many tasks we found
+							logger.Debug("🔍 Found %d tasks in revoke workflow response", len(tasks))
+
+							if !isSuccess && failureReason == "" {
+								_, _, failureReason = processTasks(tasks, isSuccess)
+
+								if failureReason == "No specific failure reason found in logs" {
+									// Try to find failure info directly in the workflow response
+									if message, ok := firstRequest["message"].(string); ok && message != "" {
+										logger.Debug("🔍 Found message in workflow: %s", message)
+										if containsAny(message, []string{"Failed", "Error", "failed", "error"}) {
+											failureReason = message
+										}
+									}
+
+									// If still no reason, check if there's a tooltip
+									if tooltip, ok := firstRequest["toolTip"].(string); ok && tooltip != "" {
+										logger.Debug("🔍 Found tooltip in workflow: %s", tooltip)
+										failureReason = tooltip
+									}
+								}
+
+								if failureReason != "" && failureReason != "No specific failure reason found in logs" {
+									logger.Error("❌ Revocation failure reason: %s", failureReason)
+								}
+							}
+						} else {
+							logger.Warn("⚠️ No tasks found in revoke workflow response")
+						}
+					}
+				}
+			}
+
+			break
+		} else {
+			logger.Info("⏳ Revocation workflow still in progress (status: %d)...", finalStatusCode)
+		}
+
+		// Wait before next attempt if not completed and not last attempt
+		if !completed && attempt < retryCount {
+			logger.Info("⏱️ Waiting %d seconds before next polling attempt...", retryInterval)
+			time.Sleep(time.Duration(retryInterval) * time.Second)
+		}
+	}
+
+	if !completed {
+		logger.Warn("⚠️ Revocation status monitoring timed out after %d attempts. Workflow may still be in progress.", retryCount)
+		return fmt.Errorf("revocation status monitoring timed out after %d attempts", retryCount)
+	}
+
+	return nil
+}
+
+// triggerCertificateRevocation calls the revocation workflow using certificate details
+func triggerCertificateRevocation(serialNumber, issuerCommonName, certificateCommonName string, d *schema.ResourceData, m interface{}) error {
+	logger.Info("=== CERTIFICATE REVOCATION WORKFLOW ===")
+	logger.Info("Serial Number: %s", serialNumber)
+	logger.Info("Issuer: %s", issuerCommonName)
+	logger.Info("Certificate CN: %s", certificateCommonName)
+
+	// Call the existing revocation logic - same as resource_revoke_certificate.go
+	logger.Info("Calling certificate revocation using existing logic from resource_revoke_certificate.go")
+	err := performCertificateRevocation(serialNumber, issuerCommonName, "Cessation of operation", "Automatic revocation triggered by Terraform destroy", d, m)
+	if err != nil {
+		logger.Error("Failed to revoke certificate: %v", err)
+		// Don't return error - we still want to clean up the state
+		logger.Info("Proceeding with state cleanup despite revocation failure")
+	} else {
+		logger.Info("Certificate revocation completed successfully")
+	}
+
+	logger.Info("=== CERTIFICATE REVOCATION COMPLETED ===")
+	return nil
+}
+
+// performCertificateRevocation implements the exact same revocation logic as resource_revoke_certificate.go
+func performCertificateRevocation(serialNumber, issuerCommonName, reason, comments string, d *schema.ResourceData, m interface{}) error {
+	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
+
+	// Authentication credentials - same as resource_revoke_certificate.go
+	appviewxUserName := configAppViewXEnvironment.AppViewXUserName
+	appviewxPassword := configAppViewXEnvironment.AppViewXPassword
+	appviewxClientId := configAppViewXEnvironment.AppViewXClientId
+	appviewxClientSecret := configAppViewXEnvironment.AppViewXClientSecret
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+	appviewxGwSource := "external" // Same as resource_revoke_certificate.go
+
+	var appviewxSessionID, accessToken string
+	var err error
+
+	// Authentication - same logic as resource_revoke_certificate.go
+	if appviewxUserName != "" && appviewxPassword != "" {
+		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %v", err)
+		}
+	} else if appviewxClientId != "" && appviewxClientSecret != "" {
+		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %v", err)
+		}
+	} else {
+		return fmt.Errorf("no authentication credentials available")
+	}
+
+	// Get resource ID hook - same default as resource_revoke_certificate.go
+	resourceIdHook := "GET_CERTIFICATE_RESOURCE_ID_BY_SERIAL_ISSUER"
+
+	logger.Info("🔍 Looking up certificate with serial: %s and issuer: %s", serialNumber, issuerCommonName)
+
+	// Step 1: Call the execute-hook API to get resource ID - same as resource_revoke_certificate.go
+	resourceId, err := getResourceIdBySerialAndIssuer(appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxEnvironmentIsHTTPS, appviewxSessionID, accessToken, serialNumber, issuerCommonName, resourceIdHook)
+	if err != nil {
+		logger.Error("❌ Error retrieving resource ID:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
+		return err
+	}
+
+	logger.Info("🔄 Found certificate with resource ID: %s", resourceId)
+
+	// Step 2: Revoke certificate using the resource ID - same logic as resource_revoke_certificate.go
+	logger.Info("📝 Revocation reason: %s", reason)
+
+	// Build revocation payload - same as resource_revoke_certificate.go
+	payload := map[string]interface{}{
+		"resourceId": resourceId,
+		"reason":     reason,
+	}
+
+	// Add comments - same as resource_revoke_certificate.go
+	if comments != "" {
+		payload["comments"] = comments
+		logger.Info("💬 Revocation comments: %s", comments)
+	}
+
+	// Set query parameters - same as resource_revoke_certificate.go
+	queryParams := map[string]string{
+		"gwsource": appviewxGwSource,
+	}
+
+	// Get URL for the revoke endpoint - same as resource_revoke_certificate.go
+	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "certificate/revoke", queryParams, appviewxEnvironmentIsHTTPS)
+	logger.Debug("🌐 Revoking certificate using URL: %s", url)
+
+	// Prepare the request - same as resource_revoke_certificate.go
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		logger.Error("❌ Error in marshalling the payload:")
+		logger.Error("   ", err)
+		logger.Error("   Payload: %+v\n", payload)
+		logger.Error("----------------------------------------------------------------------\n")
+		return err
+	}
+
+	// Log the request for debugging - same as resource_revoke_certificate.go
+	payloadBytes, _ := json.MarshalIndent(payload, "", "  ")
+	logger.Debug("📝 Revocation payload:\n%s\n", string(payloadBytes))
+
+	// Create HTTP client - same as resource_revoke_certificate.go
+	client := &http.Client{Transport: HTTPTransport()}
+
+	// Create request - same as resource_revoke_certificate.go
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		logger.Error("❌ Error in creating new request:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
+		return err
+	}
+
+	// Set headers - same as resource_revoke_certificate.go
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Add authentication header - same as resource_revoke_certificate.go
+	if appviewxSessionID != "" {
+		logger.Debug("🔑 Using session ID for authentication")
+		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
+	} else if accessToken != "" {
+		logger.Debug("🔑 Using access token for authentication")
+		req.Header.Set(constants.TOKEN, accessToken)
+	}
+
+	// Make the request - same as resource_revoke_certificate.go
+	logger.Info("📤 Sending revocation request...")
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("❌ Error in revoking certificate:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
+		return err
+	}
+	defer resp.Body.Close()
+
+	logger.Info("📊 Certificate revocation response status code: %s", resp.Status)
+
+	// Read response body - same as resource_revoke_certificate.go
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("❌ Unable to read response body:")
+		logger.Error("   ", err)
+		logger.Error("----------------------------------------------------------------------")
+		return err
+	}
+
+	// Format and log JSON response for better readability - same as resource_revoke_certificate.go
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, responseBody, "", "  "); err != nil {
+		logger.Info("📦 Revocation response body (raw):\n%s\n", string(responseBody))
+	} else {
+		logger.Info("📦 Revocation response body:\n%s\n", prettyJSON.String())
+	}
+
+	// Parse response - same logic as resource_revoke_certificate.go
+	var responseObj map[string]interface{}
+	var requestId string
+	if err := json.Unmarshal(responseBody, &responseObj); err == nil {
+		if response, ok := responseObj["response"].(map[string]interface{}); ok {
+			if message, ok := response["message"].(string); ok {
+				logger.Info("💬 Response message: %s", message)
+			}
+			if reqId, ok := response["requestId"].(string); ok && reqId != "" {
+				requestId = reqId
+				logger.Info("🔑 Found request ID: %s", requestId)
+			}
+		}
+	}
+
+	// Determine if revocation was successful based on status code and response - same as resource_revoke_certificate.go
+	revocationSuccess := resp.StatusCode >= 200 && resp.StatusCode < 300
+
+	// Check for error responses - same logic as resource_revoke_certificate.go
+	if !revocationSuccess {
+		logger.Error("❌ Revocation failed:")
+		logger.Error("   Status: %s", resp.Status)
+		logger.Error("   Response:", string(responseBody))
+		logger.Error("----------------------------------------------------------------------")
+		// We don't return an error here because we want to keep the resource info in state
+		// even if revocation failed - this allows users to see what went wrong
+		return fmt.Errorf("revocation failed with status %s", resp.Status)
+	} else {
+		logger.Info("✅ Certificate with resource ID %s successfully revoked", resourceId)
+	}
+
+	logger.Info("✅ Revocation process complete")
 	return nil
 }
 
@@ -224,8 +942,8 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 		d.Set("completed", true)
 		d.Set("success", false)
 		d.Set("response_message", "Workflow polling was skipped because no request ID was provided")
-		d.Set("last_polled_time", time.Now().Format(time.RFC3339))
-		d.Set("completion_time", time.Now().Format(time.RFC3339))
+		d.Set("last_polled_time", time.Now().Format("2006-01-02 15:04:05"))
+		d.Set("completion_time", time.Now().Format("2006-01-02 15:04:05"))
 
 		return nil
 	}
@@ -308,7 +1026,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 		lastResponse = responseObj
 
 		// Record last polled time
-		d.Set("last_polled_time", time.Now().Format(time.RFC3339))
+		d.Set("last_polled_time", time.Now().Format("2006-01-02 15:04:05"))
 
 		// Check if the workflow has completed
 		statusCode, completed = getWorkflowStatusCode(responseObj)
@@ -330,18 +1048,53 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 	}
 
 	// Record completion time
-	d.Set("completion_time", time.Now().Format(time.RFC3339))
+	d.Set("completion_time", time.Now().Format("2006-01-02 15:04:05"))
 
 	// If we've exhausted retries and workflow is still not complete
 	if !completed {
 		logger.Warn("Maximum retry count (%d) reached, but workflow is still in progress", retryCount)
+
+		// Set timeout-related state information
+		d.Set("workflow_status", "Timeout")
+		d.Set("workflow_status_code", finalStatusCode)
+		d.Set("completed", false)
+		d.Set("success", false)
+		d.Set("failure_reason", fmt.Sprintf("Polling timed out after %d attempts", retryCount))
+		d.Set("response_message", fmt.Sprintf("Polling timed out before workflow completion after %d retry attempts", retryCount))
 	}
 
 	// Process and store the final response data
 	if lastResponse != nil {
 		processWorkflowResponse(d, m, lastResponse, finalStatusCode, completed)
 	} else {
+		// Set state for no response scenario
+		d.Set("workflow_status", "No Response")
+		d.Set("completed", false)
+		d.Set("success", false)
+		d.Set("failure_reason", fmt.Sprintf("No valid response received after %d attempts", retryCount))
+		d.Set("response_message", fmt.Sprintf("No valid response received after %d polling attempts", retryCount))
+
 		return fmt.Errorf("no valid response received after %d attempts", retryCount)
+	}
+
+	// Throw error after processing only if workflow actually failed (not timeout)
+	if finalStatusCode != STATUS_SUCCESS && completed {
+		failureReason := ""
+		if reason, ok := d.GetOk("failure_reason"); ok && reason.(string) != "" {
+			failureReason = reason.(string)
+		}
+
+		if failureReason != "" && failureReason != "No specific failure reason found in logs" {
+			return fmt.Errorf("certificate workflow failed with status code %d: %s", finalStatusCode, failureReason)
+		} else {
+			return fmt.Errorf("certificate workflow failed with status code %d", finalStatusCode)
+		}
+	}
+
+	// For timeout scenarios, don't throw error - just log and store state information
+	// The workflow is still in progress on AppViewX side, it's not an actual failure
+	if !completed {
+		logger.Info("Workflow polling completed - workflow is still in progress on AppViewX (timeout after %d attempts)", retryCount)
 	}
 
 	return createPushCertificateRequestStatusRead(d, m)
@@ -487,9 +1240,10 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 				}
 
 				if createdTime, ok := firstRequest["created_time"].(float64); ok {
-					// Convert Unix timestamp to readable format
+					// Convert Unix timestamp to readable format and store epoch
 					t := time.Unix(int64(createdTime)/1000, 0)
-					d.Set("created_time", t.Format(time.RFC3339))
+					d.Set("created_time", t.Format("2006-01-02 15:04:05"))
+					d.Set("created_time_epoch", int64(createdTime))
 				}
 
 				// Set success flag based on status code
@@ -525,6 +1279,9 @@ func processWorkflowResponse(d *schema.ResourceData, m interface{}, responseObj 
 						if resourceId != "" {
 							// d.Set("certificate_resource_id", resourceId)
 							logger.Info(" Saved certificate resource ID to state: %s", resourceId)
+
+							// Fetch certificate details and log comprehensive certificate information
+							fetchAndLogCertificateDetails(resourceId, commonName, d, m)
 						}
 					}
 
@@ -669,57 +1426,57 @@ func buildResponseMessage(requestData map[string]interface{}, statusCode int, fa
 
 // Update the extractFailureReason function with a simpler approach
 func extractFailureReason(logs []interface{}) string {
-    // If there are no logs, we can't extract a failure reason
-    if len(logs) == 0 {
-        return "No logs found to determine failure reason"
-    }
+	// If there are no logs, we can't extract a failure reason
+	if len(logs) == 0 {
+		return "No logs found to determine failure reason"
+	}
 
-    // Special case: If second-to-last log entry contains "Request Failed.Please check the Request ID",
-    // then use the third-to-last entry which typically contains the detailed error
-    if len(logs) >= 3 {
-        // Check second-to-last entry for reference to another request ID
-        if secondToLast, ok := logs[len(logs)-2].(map[string]interface{}); ok {
-            secondToLastMsg := getStringValue(secondToLast, "message")
-            if strings.Contains(secondToLastMsg, "Request Failed.Please check the Request ID") {
-                logger.Debug("Found reference to another request ID in logs, checking third-to-last message for details")
-                
-                // Get the third-to-last log entry which should contain the actual error
-                if thirdToLast, ok := logs[len(logs)-3].(map[string]interface{}); ok {
-                    thirdToLastMsg := getStringValue(thirdToLast, "message")
-                    if thirdToLastMsg != "" {
-                        // Return the third-to-last message directly without parsing
-                        return thirdToLastMsg
-                    }
-                }
-            }
-        }
-    }
+	// Special case: If second-to-last log entry contains "Request Failed.Please check the Request ID",
+	// then use the third-to-last entry which typically contains the detailed error
+	if len(logs) >= 3 {
+		// Check second-to-last entry for reference to another request ID
+		if secondToLast, ok := logs[len(logs)-2].(map[string]interface{}); ok {
+			secondToLastMsg := getStringValue(secondToLast, "message")
+			if strings.Contains(secondToLastMsg, "Request Failed.Please check the Request ID") {
+				logger.Debug("Found reference to another request ID in logs, checking third-to-last message for details")
 
-    // Original logic for other cases
-    // Try second-to-last entry first
-    var relevantLog map[string]interface{}
+				// Get the third-to-last log entry which should contain the actual error
+				if thirdToLast, ok := logs[len(logs)-3].(map[string]interface{}); ok {
+					thirdToLastMsg := getStringValue(thirdToLast, "message")
+					if thirdToLastMsg != "" {
+						// Return the third-to-last message directly without parsing
+						return thirdToLastMsg
+					}
+				}
+			}
+		}
+	}
 
-    if len(logs) >= 2 {
-        if logEntry, ok := logs[len(logs)-2].(map[string]interface{}); ok {
-            relevantLog = logEntry
-        }
-    }
+	// Original logic for other cases
+	// Try second-to-last entry first
+	var relevantLog map[string]interface{}
 
-    // If we couldn't get the second-to-last, try the last one
-    if relevantLog == nil && len(logs) > 0 {
-        if logEntry, ok := logs[len(logs)-1].(map[string]interface{}); ok {
-            relevantLog = logEntry
-        }
-    }
+	if len(logs) >= 2 {
+		if logEntry, ok := logs[len(logs)-2].(map[string]interface{}); ok {
+			relevantLog = logEntry
+		}
+	}
 
-    // If we found a relevant log entry, extract the message
-    if relevantLog != nil {
-        if message, ok := relevantLog["message"].(string); ok && message != "" {
-            return message
-        }
-    }
+	// If we couldn't get the second-to-last, try the last one
+	if relevantLog == nil && len(logs) > 0 {
+		if logEntry, ok := logs[len(logs)-1].(map[string]interface{}); ok {
+			relevantLog = logEntry
+		}
+	}
 
-    return "No specific failure reason found in logs"
+	// If we found a relevant log entry, extract the message
+	if relevantLog != nil {
+		if message, ok := relevantLog["message"].(string); ok && message != "" {
+			return message
+		}
+	}
+
+	return "No specific failure reason found in logs"
 }
 
 // Update the processTasks function to focus on the actual failure message
@@ -981,8 +1738,8 @@ func extractCertificateResourceId(tasks []interface{}) string {
 
 // Add this function to your resource_workflow_logs.go file
 
-// fetchCertificateDetails retrieves certificate details using the resource ID
-func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) (string, string, error) {
+// fetchCertificateDetails retrieves certificate details using the resource ID and populates terraform state
+func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment, d *schema.ResourceData) error {
 	logger.Info(" Fetching certificate details for resource ID: %s", resourceId)
 
 	// Extract configuration parameters
@@ -1014,7 +1771,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
 		logger.Error(" Error marshalling certificate search payload: %v", err)
-		return "", "", err
+		return err
 	}
 
 	// Create HTTP client
@@ -1024,7 +1781,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		logger.Error(" Error creating certificate search request: %v", err)
-		return "", "", err
+		return err
 	}
 
 	// Set headers
@@ -1044,7 +1801,7 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Error(" Error making certificate search request: %v", err)
-		return "", "", err
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -1052,51 +1809,141 @@ func fetchCertificateDetails(resourceId, certType, appviewxSessionID, accessToke
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error(" Error reading certificate search response: %v", err)
-		return "", "", err
+		return err
 	}
 
 	// Format and log JSON response for debugging
 	// var prettyJSON bytes.Buffer
 	// if json.Indent(&prettyJSON, body, "", "  ") == nil {
-	// 	logger.Debug(" Certificate search response body (formatted JSON):\n%s", prettyJSON.String())
+	// 	logger.Info(" Certificate search response body (formatted JSON):\n%s", prettyJSON.String())
 	// } else {
-	// 	logger.Debug(" Certificate search response body (raw):\n%s", string(body))
+	// 	logger.Info(" Certificate search response body (raw):\n%s", string(body))
 	// }
+
+	// Log the full response for debugging
+	logger.Info(" Certificate search response status: %d", resp.StatusCode)
+	// logger.Info(" Certificate search full response:\n%s", string(body))
 
 	// Parse response to extract certificate details
 	var responseObj map[string]interface{}
 	if err := json.Unmarshal(body, &responseObj); err != nil {
 		logger.Error(" Error parsing certificate search response: %v", err)
-		return "", "", err
+		return err
 	}
 
-	// Extract certificate common name and serial number from response
-	var commonName, serialNumber string
-
+	// Extract and populate all certificate details from response
 	if resp, ok := responseObj["response"].(map[string]interface{}); ok {
 		if innerResp, ok := resp["response"].(map[string]interface{}); ok {
 			if objects, ok := innerResp["objects"].([]interface{}); ok && len(objects) > 0 {
 				if cert, ok := objects[0].(map[string]interface{}); ok {
+					logger.Info(" Successfully found certificate object, extracting details...")
+
+					// Basic certificate information
 					if cn, ok := cert["commonName"].(string); ok {
-						commonName = cn
-						logger.Info(" Found certificate common name: %s", commonName)
+						d.Set("certificate_common_name", cn)
+						logger.Info(" Set certificate_common_name: %s", cn)
 					}
 
 					if sn, ok := cert["serialNumber"].(string); ok {
-						serialNumber = sn
-						logger.Info(" Found certificate serial number: %s", serialNumber)
+						d.Set("certificate_serial_number", sn)
+						logger.Info(" Set certificate_serial_number: %s", sn)
 					}
+
+					if resourceIdFromResp, ok := cert["resourceId"].(string); ok {
+						d.Set("certificate_resource_id", resourceIdFromResp)
+					}
+
+					if uuid, ok := cert["uuid"].(string); ok {
+						d.Set("certificate_uuid", uuid)
+					}
+
+					// Extract Azure Key Vault information from device details
+					if deviceDetails, ok := cert["deviceDetails"].(map[string]interface{}); ok {
+						if attributes, ok := deviceDetails["attributes"].(map[string]interface{}); ok {
+							if keyVaultName, ok := attributes["keyVaultName"].(string); ok {
+								d.Set("key_vault_name", keyVaultName)
+							}
+							if certFileName, ok := attributes["certificateFileName"].(string); ok {
+								d.Set("key_vault_secret_name", certFileName)
+							}
+						}
+					}
+
+					// Certificate Metadata
+					if sans, ok := cert["subjectAlternativeNames"].([]interface{}); ok {
+						sanList := make([]string, len(sans))
+						for i, san := range sans {
+							if sanStr, ok := san.(string); ok {
+								sanList[i] = sanStr
+							}
+						}
+						d.Set("subject_alternative_names", sanList)
+					}
+
+					if validFor, ok := cert["validFor"].(string); ok {
+						d.Set("validity_period", validFor)
+						logger.Info(" Set validity_period: %s", validFor)
+					}
+
+					if issuer, ok := cert["issuerCommonName"].(string); ok {
+						d.Set("issuer", issuer)
+					}
+
+					if status, ok := cert["status"].(string); ok {
+						d.Set("certificate_status", status)
+					}
+
+					// Timestamps - convert milliseconds to readable date format and store epoch
+					if validFrom, ok := cert["validFrom"].(float64); ok {
+						issuedAt := time.Unix(int64(validFrom)/1000, 0).Format("2006-01-02 15:04:05")
+						d.Set("issued_at", issuedAt)
+						d.Set("issued_at_epoch", int64(validFrom))
+						logger.Info(" Set issued_at: %s (epoch: %d)", issuedAt, int64(validFrom))
+					}
+
+					if validTo, ok := cert["validTo"].(float64); ok {
+						expiresAt := time.Unix(int64(validTo)/1000, 0).Format("2006-01-02 15:04:05")
+						d.Set("expires_at", expiresAt)
+						d.Set("expires_at_epoch", int64(validTo))
+						logger.Info(" Set expires_at: %s (epoch: %d)", expiresAt, int64(validTo))
+					} // Additional certificate details
+					if keyAlgo, ok := cert["keyAlgorithmAndSize"].(string); ok {
+						d.Set("key_algorithm", keyAlgo)
+					}
+
+					if sigAlgo, ok := cert["signatureAlgorithm"].(string); ok {
+						d.Set("signature_algorithm", sigAlgo)
+					}
+
+					if thumbprint, ok := cert["thumbPrint"].(string); ok {
+						d.Set("thumbprint", thumbprint)
+					}
+
+					if ca, ok := cert["certificateAuthority"].(string); ok {
+						d.Set("certificate_authority", ca)
+					}
+
+					if keyUsage, ok := cert["keyUsage"].(string); ok {
+						d.Set("key_usage", keyUsage)
+					}
+
+					if extKeyUsage, ok := cert["extendedKeyUsage"].(string); ok {
+						d.Set("extended_key_usage", extKeyUsage)
+					}
+
+					if expiryStatus, ok := cert["expiryStatus"].(string); ok {
+						d.Set("certificate_expiry_status", expiryStatus)
+					}
+
+					logger.Info(" Successfully populated all certificate details in terraform state")
+					return nil
 				}
 			}
 		}
 	}
 
-	if commonName == "" || serialNumber == "" {
-		logger.Warn("Could not extract certificate details from response")
-		return "", "", fmt.Errorf("certificate details not found in response")
-	}
-
-	return commonName, serialNumber, nil
+	logger.Warn(" Could not extract certificate details from response")
+	return fmt.Errorf("certificate details not found in response")
 }
 
 // downloadCertificateIfRequired handles certificate downloading if requested in configuration
@@ -1195,4 +2042,87 @@ func downloadCertificateIfRequired(resourceId string, d *schema.ResourceData, m 
 	} else {
 		logger.Error(" Failed to download certificate")
 	}
+}
+
+// fetchAndLogCertificateDetails uses the existing fetchCertificateDetails method to get and log certificate information
+func fetchAndLogCertificateDetails(resourceId, commonName string, d *schema.ResourceData, m interface{}) {
+	logger.Info("\n=== SEARCHING FOR CERTIFICATE DETAILS ===")
+	logger.Info(" Resource ID: %s", resourceId)
+	logger.Info(" Common Name: %s", commonName)
+
+	// Get configuration
+	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
+
+	// Get authentication credentials
+	appviewxUserName := configAppViewXEnvironment.AppViewXUserName
+	appviewxPassword := configAppViewXEnvironment.AppViewXPassword
+	appviewxClientId := configAppViewXEnvironment.AppViewXClientId
+	appviewxClientSecret := configAppViewXEnvironment.AppViewXClientSecret
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+	appviewxGwSource := "WEB"
+
+	var appviewxSessionID, accessToken string
+	var err error
+
+	// Try authentication
+	if appviewxUserName != "" && appviewxPassword != "" {
+		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			logger.Error("Failed to get session for certificate search: %v", err)
+			return
+		}
+		logger.Info("Successfully authenticated using session ID")
+	} else if appviewxClientId != "" && appviewxClientSecret != "" {
+		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			logger.Error("Failed to get access token for certificate search: %v", err)
+			return
+		}
+		logger.Info("Successfully authenticated using access token")
+	} else {
+		logger.Error("No authentication credentials available for certificate search")
+		return
+	}
+
+	// Use the existing fetchCertificateDetails method
+	logger.Info("Calling fetchCertificateDetails with:")
+	logger.Info(" - Resource ID: %s", resourceId)
+	logger.Info(" - Certificate Type: Server")
+
+	err = fetchCertificateDetails(
+		resourceId,
+		"Server",
+		appviewxSessionID,
+		accessToken,
+		configAppViewXEnvironment,
+		d,
+	)
+
+	if err != nil {
+		logger.Error("Failed to fetch certificate details using resourceId: %v", err)
+		logger.Error("This error indicates the certificate search API may have issues")
+		logger.Error("Common causes: invalid resourceId, authentication issues, or API endpoint problems")
+
+		// Log the specific search parameters that failed
+		logger.Error("Search parameters that failed:")
+		logger.Error(" - Resource ID: %s", resourceId)
+		logger.Error(" - Certificate Type: Server")
+		logger.Error(" - Environment: %s:%s",
+			configAppViewXEnvironment.AppViewXEnvironmentIP,
+			configAppViewXEnvironment.AppViewXEnvironmentPort)
+		logger.Error(" - HTTPS: %t", configAppViewXEnvironment.AppViewXIsHTTPS)
+		logger.Error(" - Session ID provided: %t", appviewxSessionID != "")
+		logger.Error(" - Access Token provided: %t", accessToken != "")
+
+		return
+	}
+
+	// Log success - the details are already set in terraform state by fetchCertificateDetails
+	logger.Info("\n=== CERTIFICATE SEARCH RESULTS ===")
+	logger.Info("Certificate details successfully retrieved and populated in terraform state:")
+	logger.Info(" Common Name: %s", d.Get("certificate_common_name").(string))
+	logger.Info(" Serial Number: %s", d.Get("certificate_serial_number").(string))
+	logger.Info("=== CERTIFICATE SEARCH COMPLETED ===\n")
 }
