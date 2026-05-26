@@ -142,7 +142,7 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 		log.Println("[ERROR] CommonName, SerialNumber or Resource ID details are not available to proceed with certificate download")
 		return errors.New("[ERROR] CommonName, SerialNumber or Resource ID details are not available to proceed with certificate download")
 	}
-	if downloadSuccess := downloadCertificateFromAppviewx(resourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+	if _, downloadSuccess := downloadCertificateFromAppviewx(resourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath, isChainRequired, true, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
 		log.Println("[INFO] Certificate downloaded successfully in the specified path")
 		resourceData.SetId(strconv.Itoa(rand.Int()))
 	} else {
@@ -196,7 +196,7 @@ func downloadKeyWithPriority(resourceData *schema.ResourceData, commonName, seri
 	}
 	uuid := searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID
 	log.Println("[INFO] UUID for the resource id " + resourceID + " was obtained successfully")
-	if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+	if _, downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, true, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
 		log.Println("[INFO] Private key downloaded successfully in the specified path")
 		resourceData.SetId(strconv.Itoa(rand.Int()))
 	} else {

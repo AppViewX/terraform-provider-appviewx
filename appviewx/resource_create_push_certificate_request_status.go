@@ -2023,7 +2023,7 @@ func downloadCertificateIfRequired(resourceId string, d *schema.ResourceData, m 
 	// Get certificate download password if required
 	// certDownloadPassword := d.Get("certificate_download_password").(string)
 	// Download certificate
-	downloadSuccess := downloadCertificateFromAppviewx(
+	_, downloadSuccess := downloadCertificateFromAppviewx(
 		resourceId,
 		certCommonName,
 		"",
@@ -2031,6 +2031,7 @@ func downloadCertificateIfRequired(resourceId string, d *schema.ResourceData, m 
 		"",
 		fullDownloadPath,
 		certificateChainRequired,
+		true,
 		appviewxSessionID,
 		accessToken,
 		configAppViewXEnvironment,

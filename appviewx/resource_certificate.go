@@ -125,6 +125,20 @@ func ResourceCertificateServer() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+			"download_to_file": &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  true,
+			},
+			"certificate": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"private_key": &schema.Schema{
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
+			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: resourceCertificateImport,
@@ -238,12 +252,25 @@ func downloadCertificate(resourceData *schema.ResourceData, resourceID string, a
 	}
 	isChainRequired = resourceData.Get(constants.CERTIFICATE_CHAIN_REQUIRED).(bool)
 
-	if downloadSuccess := downloadCertificateFromAppviewx(resourceID, "", "", downloadFormat, downloadPassword, downloadPath, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
-		log.Println("[INFO] Certificate downloaded successfully in the specified path")
-		resourceData.SetId(strconv.Itoa(rand.Int()))
+	var writeToFile bool = true
+	if v, ok := resourceData.GetOkExists("download_to_file"); ok {
+		writeToFile = v.(bool)
 	} else {
-		log.Println("[ERROR] Certificate was not downloaded in the specified path")
-		return errors.New("[ERROR] Certificate was not downloaded in the specified path")
+		val := resourceData.Get("download_to_file")
+		if val != nil {
+			writeToFile = val.(bool)
+		}
+	}
+
+	if certContent, downloadSuccess := downloadCertificateFromAppviewx(resourceID, "", "", downloadFormat, downloadPassword, downloadPath, isChainRequired, writeToFile, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+		log.Println("[INFO] Certificate downloaded successfully")
+		resourceData.SetId(strconv.Itoa(rand.Int()))
+		if !writeToFile {
+			resourceData.Set("certificate", certContent)
+		}
+	} else {
+		log.Println("[ERROR] Certificate was not downloaded")
+		return errors.New("[ERROR] Certificate was not downloaded")
 	}
 	return nil
 }
