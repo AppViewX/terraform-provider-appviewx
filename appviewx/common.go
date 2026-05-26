@@ -218,7 +218,7 @@ func GetDownloadPassword(resourceData *schema.ResourceData, downloadFormat strin
 	return "", true
 }
 
-func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath string, isChainRequired bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) bool {
+func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath string, isChainRequired, writeToFile bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) (string, bool) {
 	httpMethod := config.HTTPMethodPost
 	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
 	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
@@ -229,7 +229,7 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
 		log.Println("[ERROR] error in Marshalling the payload ", payload, err)
-		return false
+		return "", false
 	}
 	client := &http.Client{Transport: HTTPTransport()}
 
@@ -238,7 +238,7 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		log.Println("[ERROR] error in creating new Request", err)
-		return false
+		return "", false
 	}
 
 	for key, value := range headers {
@@ -254,7 +254,7 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 	httpResponse, err := client.Do(req)
 	if err != nil {
 		log.Println("[ERROR] error in http request", err)
-		return false
+		return "", false
 	} else {
 		log.Println("[INFO] Request for downloading the certificate submitted successfully")
 	}
@@ -263,21 +263,26 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 		responseBody, err := io.ReadAll(httpResponse.Body)
 		if err == nil {
 			log.Println("[ERROR] Response obtained : ", string(responseBody))
-			return false
+			return "", false
 		}
 	}
 	responseByte, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		log.Println("[ERROR] ", err)
-		return false
+		return "", false
 	} else {
-		err = os.WriteFile(downloadPath, responseByte, 0777)
-		if err != nil {
-			log.Println("[ERROR] Error while downloading the certificate file content in ", downloadPath, " due to : ", err)
-			return false
+		if writeToFile {
+			err = os.WriteFile(downloadPath, responseByte, 0777)
+			if err != nil {
+				log.Println("[ERROR] Error while downloading the certificate file content in ", downloadPath, " due to : ", err)
+				return "", false
+			} else {
+				log.Println("[INFO] Downloaded certificate file and available in ", downloadPath)
+				return string(responseByte), true
+			}
 		} else {
-			log.Println("[INFO] Downloaded certificate file and available in ", downloadPath)
-			return true
+			log.Println("[INFO] Retrieved certificate content into state")
+			return string(responseByte), true
 		}
 	}
 
@@ -291,6 +296,17 @@ func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionI
 	downloadPassword := getPasswordWithPriority(providerKeyPassword, resourceKeyPassword)
 	downloadPasswordProtectedKey := resourceData.Get(constants.DOWNLOAD_PASSWORD_PROTECTED_KEY).(bool)
 
+	var writeToFile bool = true
+	if v, ok := resourceData.GetOkExists("download_to_file"); ok {
+		writeToFile = v.(bool)
+	} else {
+		// fallback if GetOkExists doesn't work for boolean default
+		val := resourceData.Get("download_to_file")
+		if val != nil {
+			writeToFile = val.(bool)
+		}
+	}
+
 	if downloadPassword == "" {
 		log.Println("[ERROR] Password not found for private key download")
 		return errors.New("[ERROR] Password not found for private key download")
@@ -303,17 +319,20 @@ func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionI
 	}
 	uuid := searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID
 	log.Println("[INFO] UUID for the resource id " + resourceID + " was obtained successfully")
-	if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
-		log.Println("[INFO] Private key downloaded successfully in the specified path")
+	if keyContent, downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, writeToFile, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+		log.Println("[INFO] Private key downloaded successfully")
 		resourceData.SetId(strconv.Itoa(rand.Int()))
+		if !writeToFile {
+			resourceData.Set("private_key", keyContent)
+		}
 	} else {
-		log.Println("[ERROR] Private key was not downloaded in the specified path")
-		return errors.New("[ERROR] Private key was not downloaded in the specified path")
+		log.Println("[ERROR] Private key was not downloaded")
+		return errors.New("[ERROR] Private key was not downloaded")
 	}
 	return nil
 }
 
-func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downloadPasswordProtectedKey bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) bool {
+func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downloadPasswordProtectedKey, writeToFile bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) (string, bool) {
 	httpMethod := config.HTTPMethodPost
 	var response config.AppviewxDownloadKeyResponse
 	var responseByte []byte
@@ -326,7 +345,7 @@ func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downlo
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
 		log.Println("[ERROR] error in Marshalling the payload ", payload, err)
-		return false
+		return "", false
 	}
 	client := &http.Client{Transport: HTTPTransport()}
 
@@ -335,7 +354,7 @@ func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downlo
 	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		log.Println("[ERROR] error in creating new Request", err)
-		return false
+		return "", false
 	}
 
 	for key, value := range headers {
@@ -351,7 +370,7 @@ func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downlo
 	httpResponse, err := client.Do(req)
 	if err != nil {
 		log.Println("[ERROR] error in http request", err)
-		return false
+		return "", false
 	} else {
 		log.Println("[INFO] Request for downloading the private submitted successfully")
 	}
@@ -360,35 +379,38 @@ func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downlo
 		responseBody, err := io.ReadAll(httpResponse.Body)
 		if err == nil {
 			log.Println("[ERROR] Response obtained : ", string(responseBody))
-			return false
+			return "", false
 		}
 	}
 	if responseByte, err = io.ReadAll(httpResponse.Body); err != nil {
 		log.Println("[ERROR] Error while obtaining the response due to : ", err)
-		return false
+		return "", false
 	}
 	if err = json.Unmarshal(responseByte, &response); err != nil {
 		log.Println("[ERROR] Error while obtaining the response due to : ", err)
-		return false
+		return "", false
 	} else if response.AppviewxResponse.Status == "Success" {
 		if downloadPasswordProtectedKey {
 			log.Println("[INFO] Downloading the password protected private key file content. Kindly use the password provided in the .tf file")
-			if err := writeKeyToFile(downloadPath, []byte(response.AppviewxResponse.PrivateKey)); err != nil {
-				return false
+			if res, err := writeKeyToFile(downloadPath, []byte(response.AppviewxResponse.PrivateKey), writeToFile); err != nil {
+				return "", false
+			} else {
+				return res, true
 			}
 		} else {
-			if err := decryptPasswordProtectedKeyAndDownloadKey(response.AppviewxResponse.PrivateKey, downloadPassword, downloadPath); err != nil {
-				return false
+			if res, err := decryptPasswordProtectedKeyAndDownloadKey(response.AppviewxResponse.PrivateKey, downloadPassword, downloadPath, writeToFile); err != nil {
+				return "", false
+			} else {
+				return res, true
 			}
 		}
 	} else {
 		log.Println("[ERROR] Error while obtaining the response due to : ", err)
-		return false
+		return "", false
 	}
-	return true
 }
 
-func decryptPasswordProtectedKeyAndDownloadKey(encryptedPrivateKey, password string, downloadPath string) error {
+func decryptPasswordProtectedKeyAndDownloadKey(encryptedPrivateKey, password string, downloadPath string, writeToFile bool) (string, error) {
 	log.Println("[INFO] Decrypting the password protected private key file content")
 	tempFile := filepath.Join(os.TempDir(), "temp_private_key.pem")
 	var file *os.File
@@ -396,34 +418,50 @@ func decryptPasswordProtectedKeyAndDownloadKey(encryptedPrivateKey, password str
 	file, err = os.Create(tempFile)
 	if err != nil {
 		fmt.Println("Error creating temp file:", err)
-		return errors.New("error while decrypting the private key file content")
+		return "", errors.New("error while decrypting the private key file content")
 	}
-	defer file.Close()
 	defer os.Remove(tempFile)
 
 	_, err = file.WriteString(encryptedPrivateKey)
+	file.Close()
 	if err != nil {
 		fmt.Println("Error writing to file:", err)
-		return errors.New("error while decrypting the private key file content")
+		return "", errors.New("error while decrypting the private key file content")
 	}
-	cmd := exec.Command("openssl", "pkey", "-in", tempFile, "-out", downloadPath, "-passin", "pass:"+password)
+	cmd := exec.Command("openssl", "pkey", "-in", tempFile, "-passin", "pass:"+password)
 
-	err = cmd.Run()
+	out, err := cmd.Output()
 	if err != nil {
 		log.Printf("[ERROR] Error executing OpenSSL command: %v\n", err)
-		return errors.New("error while decrypting the private key file content")
+		return "", errors.New("error while decrypting the private key file content")
 	}
-	log.Println("[INFO] Private key decrypted successfully and saved in the specified path")
-	return nil
+
+	if writeToFile {
+		err = os.WriteFile(downloadPath, out, 0600)
+		if err != nil {
+			log.Printf("[ERROR] Error writing decrypted key to file: %v\n", err)
+			return "", errors.New("error writing decrypted key to file")
+		}
+		log.Println("[INFO] Private key decrypted successfully and saved in the specified path")
+	} else {
+		log.Println("[INFO] Private key decrypted successfully and saved in state")
+	}
+
+	return string(out), nil
 }
 
-func writeKeyToFile(downloadPath string, fileContent []byte) error {
-	if err := os.WriteFile(downloadPath, fileContent, 0777); err != nil {
-		log.Println("[ERROR] Error while downloading the private key file content in ", downloadPath, " due to : ", err)
-		return errors.New("[ERROR] Error while downloading the private key file content in " + downloadPath + " due to : " + err.Error())
+func writeKeyToFile(downloadPath string, fileContent []byte, writeToFile bool) (string, error) {
+	if writeToFile {
+		if err := os.WriteFile(downloadPath, fileContent, 0777); err != nil {
+			log.Println("[ERROR] Error while downloading the private key file content in ", downloadPath, " due to : ", err)
+			return "", errors.New("[ERROR] Error while downloading the private key file content in " + downloadPath + " due to : " + err.Error())
+		} else {
+			log.Println("[INFO] Downloaded private key file and available in ", downloadPath)
+			return string(fileContent), nil
+		}
 	} else {
-		log.Println("[INFO] Downloaded private key file and available in ", downloadPath)
-		return nil
+		log.Println("[INFO] Retrieved private key content into state")
+		return string(fileContent), nil
 	}
 }
 
