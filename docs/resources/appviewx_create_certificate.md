@@ -145,3 +145,19 @@ To import an existing certificate into the Terraform state, use the following co
 terraform import appviewx_create_certificate.createcert <resource_id>
 ```
 Replace `<resource_id>` with the actual resource ID of the certificate you want to import.
+
+### Auto-renewal (optional)
+
+| Name | Default | Description |
+|---|---|---|
+| `is_auto_renewal` | `false` | Enable automatic renewal in AppViewX. |
+| `renew_before` | | Days before expiry to renew (e.g. `"30"`). Only sent when `is_auto_renewal = true`. |
+| `auto_regenerate_enabled` | `false` | Regenerate a new key/CSR on renewal (vs. renew with the existing key). Only sent when `is_auto_renewal = true`. |
+
+### Revoke on destroy (optional)
+
+| Name | Default | Description |
+|---|---|---|
+| `revoke_on_destroy` | `false` | Revoke the certificate in AppViewX on `terraform destroy`. |
+| `revoke_reason` | `Cessation of operation` | One of: Unspecified, Key compromise, CA compromise, Affiliation Changed, Superseded, Cessation of operation. |
+| `revoke_comments` | | Optional free-text comment sent with the revocation. |
