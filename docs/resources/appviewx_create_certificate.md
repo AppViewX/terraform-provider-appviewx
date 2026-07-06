@@ -154,6 +154,14 @@ Replace `<resource_id>` with the actual resource ID of the certificate you want 
 | `renew_before` | | Days before expiry to renew (e.g. `"30"`). Only sent when `is_auto_renewal = true`. |
 | `auto_regenerate_enabled` | `false` | Regenerate a new key/CSR on renewal (vs. renew with the existing key). Only sent when `is_auto_renewal = true`. |
 
+### Wait for issuance (optional)
+
+| Name | Default | Description |
+|---|---|---|
+| `wait_for_issuance` | `false` | Block until the certificate is issued (polls the create request to completion) before returning. Certificate creation is asynchronous, so **enable this when a dependent resource pushes the certificate in the same apply** (e.g. `appviewx_push_gcp_certificate_manager`) — otherwise the push can race ahead of issuance. |
+| `issuance_timeout_seconds` | `600` | Max seconds to wait for issuance. Must be >= 1. |
+| `issuance_poll_interval_seconds` | `10` | Seconds between issuance status polls. Must be >= 1. |
+
 ### Revoke on destroy (optional)
 
 | Name | Default | Description |

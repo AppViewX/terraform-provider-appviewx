@@ -30,6 +30,10 @@ resource "appviewx_create_certificate" "this" {
   is_auto_renewal = true
   renew_before    = "30"
 
+  # Block until the cert is issued so the push below runs against a ready cert
+  # (create is async; without this the push can race ahead of issuance).
+  wait_for_issuance = true
+
   revoke_on_destroy = true
   revoke_reason     = "Cessation of operation"
 }
