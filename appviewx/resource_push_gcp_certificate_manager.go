@@ -26,14 +26,14 @@ func constructGCPCertificateID(project, location, name string) string {
 
 // buildGCPPushPayload builds the /avxapi/certificate/pushToDevice request body for
 // the cert-manager-only workflow (no LB binding).
-func buildGCPPushPayload(certificateID, certificateName, location, connectorName string, isNewCertificate, pushAutomatically bool, selectedProfiles []string) map[string]interface{} {
+func buildGCPPushPayload(certificateID, certificateName, location, connectorName, profileType string, isNewCertificate, pushAutomatically bool, selectedProfiles []string) map[string]interface{} {
 	return map[string]interface{}{
 		"generalInformation": map[string]interface{}{
 			"category":               "cloud",
 			"vendor":                 "GCP",
 			"profileFilterSelection": ":Certificate Manager",
 			"name":                   connectorName,
-			"profileType":            "Push and Bind Profiles",
+			"profileType":            profileType,
 		},
 		"certificateDetails": map[string]interface{}{
 			"isNewCertificate":       isNewCertificate,
@@ -48,6 +48,28 @@ func buildGCPPushPayload(certificateID, certificateName, location, connectorName
 		"certificateId":    certificateID,
 		"selectedProfiles": selectedProfiles,
 	}
+}
+
+// extractPushIDs pulls requestId/connectorId from the pushToDevice "response"
+// field, which AppViewX returns either as [{"requestId":..,"connectorId":..}]
+// or as a bare ["<connectorId>"] array.
+func extractPushIDs(response interface{}) (requestID, connectorID string) {
+	arr, ok := response.([]interface{})
+	if !ok || len(arr) == 0 {
+		return "", ""
+	}
+	switch first := arr[0].(type) {
+	case map[string]interface{}:
+		if v, ok := first["requestId"].(string); ok {
+			requestID = v
+		}
+		if v, ok := first["connectorId"].(string); ok {
+			connectorID = v
+		}
+	case string:
+		connectorID = first
+	}
+	return requestID, connectorID
 }
 
 func ResourcePushGCPCertificateManager() *schema.Resource {
@@ -87,6 +109,12 @@ func ResourcePushGCPCertificateManager() *schema.Resource {
 				Required:    true,
 				ForceNew:    true,
 				Description: "AppViewX GCP connector name (generalInformation.name)",
+			},
+			constants.PROFILE_TYPE: &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "Push and Bind Profiles",
+				Description: "AppViewX profileType, e.g. \"Push and Bind Profiles\" or the push-only variant to avoid binding to a load balancer",
 			},
 			constants.SELECTED_PROFILES: &schema.Schema{
 				Type:        schema.TypeList,
@@ -200,6 +228,7 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 	project := d.Get(constants.GCP_PROJECT).(string)
 	location := d.Get(constants.GCP_LOCATION).(string)
 	connectorName := d.Get(constants.GCP_CONNECTOR_NAME).(string)
+	profileType := d.Get(constants.PROFILE_TYPE).(string)
 	isNewCertificate := d.Get(constants.IS_NEW_CERTIFICATE).(bool)
 	pushAutomatically := d.Get(constants.PUSH_AUTOMATICALLY).(bool)
 
@@ -210,7 +239,7 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 	}
 
 	// Build and send the pushToDevice request.
-	payload := buildGCPPushPayload(certificateID, certificateName, location, connectorName, isNewCertificate, pushAutomatically, selectedProfiles)
+	payload := buildGCPPushPayload(certificateID, certificateName, location, connectorName, profileType, isNewCertificate, pushAutomatically, selectedProfiles)
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -251,34 +280,42 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 		return fmt.Errorf("gcp certificate push failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response[0].requestId + connectorId.
+	// Parse the response. AppViewX may return an application-level error via
+	// "appStatusCode"/"message" or a null "response" even on a 2xx body.
 	var responseObj map[string]interface{}
 	if err := json.Unmarshal(body, &responseObj); err != nil {
 		return fmt.Errorf("unable to parse push response: %v", err)
 	}
-	var requestID, connectorID string
-	if arr, ok := responseObj["response"].([]interface{}); ok && len(arr) > 0 {
-		if first, ok := arr[0].(map[string]interface{}); ok {
-			if v, ok := first["requestId"].(string); ok {
-				requestID = v
-			}
-			if v, ok := first["connectorId"].(string); ok {
-				connectorID = v
-			}
-		}
+
+	message, _ := responseObj["message"].(string)
+	appStatusCode, _ := responseObj["appStatusCode"].(string)
+
+	if appStatusCode != "" {
+		return fmt.Errorf("gcp certificate push failed: %s (appStatusCode=%s)", message, appStatusCode)
 	}
-	if requestID == "" {
-		return fmt.Errorf("gcp certificate push did not return a requestId: %s", string(body))
+	if responseObj["response"] == nil {
+		return fmt.Errorf("gcp certificate push failed: %s", message)
 	}
+
+	// Extract requestId / connectorId. AppViewX returns the "response" array in one
+	// of two shapes: [{"requestId":..,"connectorId":..}] or ["<connectorId>"].
+	requestID, connectorID := extractPushIDs(responseObj["response"])
 	d.Set(constants.REQUEST_ID, requestID)
 	d.Set(constants.CONNECTOR_ID, connectorID)
+	if message != "" {
+		logger.Info("GCP push message: %s", message)
+	}
 
 	// Optionally wait for completion by polling the request status.
 	if d.Get(constants.WAIT_FOR_COMPLETION).(bool) {
-		waitTimeout := d.Get(constants.WAIT_TIMEOUT_SECONDS).(int)
-		pollInterval := d.Get(constants.POLL_INTERVAL_SECONDS).(int)
-		if err := waitForPushCompletion(configAppViewXEnvironment, appviewxSessionID, accessToken, appviewxGwSource, requestID, waitTimeout, pollInterval); err != nil {
-			return err
+		if requestID == "" {
+			logger.Warn("wait_for_completion is set but AppViewX did not return a requestId; skipping wait")
+		} else {
+			waitTimeout := d.Get(constants.WAIT_TIMEOUT_SECONDS).(int)
+			pollInterval := d.Get(constants.POLL_INTERVAL_SECONDS).(int)
+			if err := waitForPushCompletion(configAppViewXEnvironment, appviewxSessionID, accessToken, appviewxGwSource, requestID, waitTimeout, pollInterval); err != nil {
+				return err
+			}
 		}
 	}
 

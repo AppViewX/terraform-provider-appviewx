@@ -83,6 +83,7 @@ const (
 	GCP_PROJECT                 = "project"
 	GCP_LOCATION                = "location"
 	GCP_CONNECTOR_NAME          = "gcp_connector_name"
+	PROFILE_TYPE                = "profile_type"
 	IS_NEW_CERTIFICATE          = "is_new_certificate"
 	PUSH_AUTOMATICALLY          = "push_automatically"
 	WAIT_FOR_COMPLETION         = "wait_for_completion"
