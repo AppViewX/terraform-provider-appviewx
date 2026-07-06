@@ -43,3 +43,23 @@ func TestFrameCertificatePayload_AutoRenewalDisabledByDefault(t *testing.T) {
 		t.Fatalf("expected nil autoRegenerateEnabled when not enabled, got %v", *payload.CaConnectorInfo.AutoRegenerateEnabled)
 	}
 }
+
+func TestBuildRevokePayload_WithComments(t *testing.T) {
+	got := buildRevokePayload("6a47c392e9692037365e62e1", "Cessation of operation", "decommissioned")
+	if got["resourceId"] != "6a47c392e9692037365e62e1" {
+		t.Fatalf("unexpected resourceId: %v", got["resourceId"])
+	}
+	if got["reason"] != "Cessation of operation" {
+		t.Fatalf("unexpected reason: %v", got["reason"])
+	}
+	if got["comments"] != "decommissioned" {
+		t.Fatalf("expected comments to be set, got: %v", got["comments"])
+	}
+}
+
+func TestBuildRevokePayload_WithoutComments(t *testing.T) {
+	got := buildRevokePayload("abc", "Superseded", "")
+	if _, ok := got["comments"]; ok {
+		t.Fatalf("expected comments to be omitted when empty, got: %v", got["comments"])
+	}
+}

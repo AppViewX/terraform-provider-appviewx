@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
@@ -139,6 +140,28 @@ func ResourceCertificateServer() *schema.Resource {
 				Optional: true,
 				Default:  false,
 			},
+			constants.REVOKE_ON_DESTROY: &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+			constants.REVOKE_REASON: &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "Cessation of operation",
+				ValidateFunc: validation.StringInSlice([]string{
+					"Unspecified",
+					"Key compromise",
+					"CA compromise",
+					"Affiliation Changed",
+					"Superseded",
+					"Cessation of operation",
+				}, false),
+			},
+			constants.REVOKE_COMMENTS: &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: resourceCertificateImport,
@@ -170,9 +193,91 @@ func resourceCertificateServerUpdate(resourceData *schema.ResourceData, m interf
 }
 
 func resourceCertificateServerDelete(d *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO]  **************** DELETE OPERATION NOT SUPPORTED FOR THIS RESOURCE **************** ")
-	// Delete implementation is empty since this resoruce is for the stateless generic api invocation
+	log.Println("[INFO]  **************** DELETE OPERATION FOR CERTIFICATE **************** ")
+	if d.Get(constants.REVOKE_ON_DESTROY).(bool) {
+		if err := revokeCertificateOnDestroy(d, m); err != nil {
+			log.Println("[ERROR] Error revoking certificate on destroy: ", err)
+			return err
+		}
+	}
 	d.SetId("")
+	return nil
+}
+
+func buildRevokePayload(resourceID, reason, comments string) map[string]interface{} {
+	payload := map[string]interface{}{
+		"resourceId": resourceID,
+		"reason":     reason,
+	}
+	if comments != "" {
+		payload["comments"] = comments
+	}
+	return payload
+}
+
+func revokeCertificateOnDestroy(d *schema.ResourceData, m interface{}) error {
+	configAppViewXEnvironment := m.(*config.AppViewXEnvironment)
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+
+	var appviewxSessionID, accessToken string
+	var err error
+	if configAppViewXEnvironment.AppViewXUserName != "" && configAppViewXEnvironment.AppViewXPassword != "" {
+		appviewxSessionID, err = GetSession(configAppViewXEnvironment.AppViewXUserName, configAppViewXEnvironment.AppViewXPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			return err
+		}
+	} else if configAppViewXEnvironment.AppViewXClientId != "" && configAppViewXEnvironment.AppViewXClientSecret != "" {
+		accessToken, err = GetAccessToken(configAppViewXEnvironment.AppViewXClientId, configAppViewXEnvironment.AppViewXClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		if err != nil {
+			return err
+		}
+	}
+	if appviewxSessionID == "" && accessToken == "" {
+		return errors.New("authentication failed - cannot revoke certificate on destroy")
+	}
+
+	resourceID := d.Get(constants.RESOURCE_ID).(string)
+	if resourceID == "" {
+		log.Println("[WARN] No resource_id in state; skipping revoke on destroy")
+		return nil
+	}
+	reason := d.Get(constants.REVOKE_REASON).(string)
+	comments := d.Get(constants.REVOKE_COMMENTS).(string)
+
+	payload := buildRevokePayload(resourceID, reason, comments)
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	queryParams := map[string]string{constants.GW_SOURCE: "external"}
+	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, "certificate/revoke", queryParams, appviewxEnvironmentIsHTTPS)
+
+	client := &http.Client{Transport: HTTPTransport()}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	if appviewxSessionID != "" {
+		req.Header.Set(constants.SESSION_ID, appviewxSessionID)
+	} else {
+		req.Header.Set(constants.TOKEN, accessToken)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("certificate revoke failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	log.Println("[INFO] Certificate revoke on destroy submitted: ", string(body))
 	return nil
 }
 
