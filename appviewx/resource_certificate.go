@@ -214,8 +214,11 @@ func resourceCertificateServerDelete(d *schema.ResourceData, m interface{}) erro
 	log.Println("[INFO]  **************** DELETE OPERATION FOR CERTIFICATE **************** ")
 	if d.Get(constants.REVOKE_ON_DESTROY).(bool) {
 		if err := revokeCertificateOnDestroy(d, m); err != nil {
-			log.Println("[ERROR] Error revoking certificate on destroy: ", err)
-			return err
+			// Match the codebase convention for revoke-on-destroy: don't fail the
+			// destroy on a revoke error (e.g. the certificate is already expired,
+			// revoked, or deleted in AppViewX). Log and continue so Terraform state
+			// is still cleaned up rather than leaving the user with a stuck destroy.
+			log.Println("[WARN] Certificate revoke on destroy failed; continuing with destroy: ", err)
 		}
 	}
 	d.SetId("")

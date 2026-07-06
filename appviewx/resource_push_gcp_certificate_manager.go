@@ -337,6 +337,11 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 // waitForRequestCompletion polls an AppViewX workflow requestId until it completes
 // (success or failure) or the timeout elapses. label is used only for log/error text
 // (e.g. "gcp push", "certificate issuance").
+//
+// Note: callers pass gwSource "WEB" for the visualworkflow-request-logs endpoint,
+// which is validated to work for the create-issuance and pushToDevice request ids.
+// (The standalone status resource uses "external" for the same endpoint; "WEB" is
+// correct for these flows.)
 func waitForRequestCompletion(cfg *config.AppViewXEnvironment, sessionID, accessToken, gwSource, requestID, label string, waitTimeoutSeconds, pollIntervalSeconds int) error {
 	logger.Info("Waiting for %s completion (requestId=%s, timeout=%ds)", label, requestID, waitTimeoutSeconds)
 	deadline := time.Now().Add(time.Duration(waitTimeoutSeconds) * time.Second)
