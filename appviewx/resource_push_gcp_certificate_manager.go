@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
@@ -91,6 +92,7 @@ func ResourcePushGCPCertificateManager() *schema.Resource {
 				Type:        schema.TypeList,
 				Required:    true,
 				ForceNew:    true,
+				MinItems:    1,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 				Description: "AppViewX selected profiles, e.g. GCP.Single.All:<project>:Certificate Manager",
 			},
@@ -111,14 +113,16 @@ func ResourcePushGCPCertificateManager() *schema.Resource {
 				Default:  true,
 			},
 			constants.WAIT_TIMEOUT_SECONDS: &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  600,
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      600,
+				ValidateFunc: validation.IntAtLeast(1),
 			},
 			constants.POLL_INTERVAL_SECONDS: &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  10,
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      10,
+				ValidateFunc: validation.IntAtLeast(1),
 			},
 			constants.CERT_MANAGER_CERTIFICATE_ID: &schema.Schema{
 				Type:        schema.TypeString,
