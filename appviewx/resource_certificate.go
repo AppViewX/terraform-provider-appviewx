@@ -125,6 +125,20 @@ func ResourceCertificateServer() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+			constants.IS_AUTO_RENEWAL: &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+			constants.RENEW_BEFORE: &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			constants.AUTO_REGENERATE_ENABLED: &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: resourceCertificateImport,
@@ -434,6 +448,14 @@ func frameCertificatePayload(resourceData *schema.ResourceData) config.CreateCer
 			vendorFields[key] = values.(string)
 		}
 		payload.CaConnectorInfo.VendorSpecificfields = vendorFields
+	}
+	if resourceData.Get(constants.IS_AUTO_RENEWAL).(bool) {
+		payload.CaConnectorInfo.IsAutoRenewal = "true"
+		if v, ok := resourceData.GetOk(constants.RENEW_BEFORE); ok {
+			payload.CaConnectorInfo.RenewBefore = v.(string)
+		}
+		autoRegen := resourceData.Get(constants.AUTO_REGENERATE_ENABLED).(bool)
+		payload.CaConnectorInfo.AutoRegenerateEnabled = &autoRegen
 	}
 	return payload
 }

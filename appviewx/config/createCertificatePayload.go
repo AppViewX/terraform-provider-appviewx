@@ -17,9 +17,12 @@ type CAConnectionInfo struct {
 	CSRParameters        CSRParameters     `json:"csrParameters"`
 	ValidityInDays       int               `json:"validityInDays"`
 	ValidityUnit         string            `json:"validityUnit"`
-	ValidityUnitValue    int               `json:"validityUnitValue"`
-	CustomAttributes     map[string]string `json:"certAttributes"`
-	VendorSpecificfields map[string]string `json:"vendorSpecificDetails"`
+	ValidityUnitValue     int               `json:"validityUnitValue"`
+	CustomAttributes      map[string]string `json:"certAttributes"`
+	VendorSpecificfields  map[string]string `json:"vendorSpecificDetails"`
+	IsAutoRenewal         string            `json:"isAutoRenewal,omitempty"`
+	RenewBefore           string            `json:"renewBefore,omitempty"`
+	AutoRegenerateEnabled *bool             `json:"autoRegenerateEnabled,omitempty"`
 }
 
 type CSRParameters struct {
