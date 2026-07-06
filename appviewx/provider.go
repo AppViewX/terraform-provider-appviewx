@@ -81,6 +81,7 @@ func Provider() *schema.Provider {
 			"appviewx_search_certificate":                     ResourceSearchCertificateByKeyword(),
 			"appviewx_revoke_certificate":                     ResourceRevokeCertificate(),
 			"appviewx_certificate_push_akv":                   ResourceCertificatePushAKV(),
+			"appviewx_push_gcp_certificate_manager":           ResourcePushGCPCertificateManager(),
 			"appviewx_create_push_certificate_request_status": CreatePushCertificateRequestStatus(),
 			"appviewx_revoke_certificate_request_status":      RevokeCertificateRequestStatus(),
 		},
