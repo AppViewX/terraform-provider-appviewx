@@ -30,7 +30,8 @@ resource "google_compute_region_target_https_proxy" "internal" {
 | `project` | yes | | GCP project id (used to construct the exposed id). Changing forces recreation. |
 | `location` | yes | | GCP region (e.g. `us-central1`) or `global`. Changing forces recreation. |
 | `gcp_connector_name` | yes | | AppViewX GCP connector name. Changing forces recreation. |
-| `selected_profiles` | yes | | List of AppViewX profiles, e.g. `GCP.Single.All:<project>:Certificate Manager`. Must be non-empty. Changing forces recreation. |
+| `profile_type` | no | `Push and Bind Profiles` | AppViewX `profileType`. Use the push-only variant your AppViewX accepts to push to Certificate Manager without binding to a load balancer. The exact string is environment-specific. |
+| `selected_profiles` | yes | | List of AppViewX profiles (the valid values are configured in your AppViewX; format `<profile>:<project>:Certificate Manager`). Must be non-empty. Changing forces recreation. |
 | `is_new_certificate` | no | `true` | Whether this is a new certificate in Certificate Manager. Changing forces recreation. |
 | `push_automatically` | no | `true` | Re-push to the target automatically after the certificate is renewed/reissued. |
 | `wait_for_completion` | no | `true` | Block until the push request completes (correct dependency ordering). |
