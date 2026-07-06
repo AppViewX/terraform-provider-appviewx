@@ -42,6 +42,10 @@ resource "appviewx_push_gcp_certificate_manager" "this" {
   gcp_connector_name  = "GCP connector"
   selected_profiles   = ["GCP.Single.All:${var.project_id}:Certificate Manager"]
   wait_for_completion = true
+
+  # profile_type defaults to "Push only Profiles" (push to Certificate Manager
+  # without binding to a load balancer). Set to "Push and Bind Profiles" to bind.
+  # profile_type = "Push only Profiles"
 }
 
 output "certificate_manager_certificate_id" {

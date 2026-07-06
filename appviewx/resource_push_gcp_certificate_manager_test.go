@@ -15,7 +15,7 @@ func TestConstructGCPCertificateID(t *testing.T) {
 
 func TestBuildGCPPushPayload(t *testing.T) {
 	profiles := []string{"GCP.Single.All:my-project:Certificate Manager"}
-	payload := buildGCPPushPayload("6a47c392e9692037365e62e1", "apigee-ingress-usc1-cert", "us-central1", "GCP connector", "Push and Bind Profiles", true, true, profiles)
+	payload := buildGCPPushPayload("6a47c392e9692037365e62e1", "apigee-ingress-usc1-cert", "us-central1", "GCP connector", "Push only Profiles", true, true, profiles)
 
 	if payload["certificateId"] != "6a47c392e9692037365e62e1" {
 		t.Fatalf("unexpected certificateId: %v", payload["certificateId"])
@@ -31,7 +31,7 @@ func TestBuildGCPPushPayload(t *testing.T) {
 	if gi["name"] != "GCP connector" {
 		t.Fatalf("unexpected connector name: %v", gi["name"])
 	}
-	if gi["profileType"] != "Push and Bind Profiles" {
+	if gi["profileType"] != "Push only Profiles" {
 		t.Fatalf("unexpected profileType: %v", gi["profileType"])
 	}
 	if gi["profileFilterSelection"] != ":Certificate Manager" {

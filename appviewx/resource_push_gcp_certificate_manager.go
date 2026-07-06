@@ -113,8 +113,9 @@ func ResourcePushGCPCertificateManager() *schema.Resource {
 			constants.PROFILE_TYPE: &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
-				Default:     "Push and Bind Profiles",
-				Description: "AppViewX profileType, e.g. \"Push and Bind Profiles\" or the push-only variant to avoid binding to a load balancer",
+				ForceNew:    true,
+				Default:     "Push only Profiles",
+				Description: "AppViewX profileType. Defaults to \"Push only Profiles\" (push to Certificate Manager without binding to a load balancer). Use \"Push and Bind Profiles\" to also bind.",
 			},
 			constants.SELECTED_PROFILES: &schema.Schema{
 				Type:        schema.TypeList,
@@ -133,6 +134,7 @@ func ResourcePushGCPCertificateManager() *schema.Resource {
 			constants.PUSH_AUTOMATICALLY: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				ForceNew: true,
 				Default:  true,
 			},
 			constants.WAIT_FOR_COMPLETION: &schema.Schema{
@@ -289,7 +291,6 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 
 	message, _ := responseObj["message"].(string)
 	appStatusCode, _ := responseObj["appStatusCode"].(string)
-
 	if appStatusCode != "" {
 		return fmt.Errorf("gcp certificate push failed: %s (appStatusCode=%s)", message, appStatusCode)
 	}
@@ -297,19 +298,24 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 		return fmt.Errorf("gcp certificate push failed: %s", message)
 	}
 
-	// Extract requestId / connectorId. AppViewX returns the "response" array in one
-	// of two shapes: [{"requestId":..,"connectorId":..}] or ["<connectorId>"].
+	// AppViewX returns the "response" array as either
+	//   [{"requestId":..,"connectorId":..}]  - clean, trackable via polling, or
+	//   ["<connectorId>"]                     - accepted but not returned as a trackable
+	//                                           request (often accompanied by an
+	//                                           "Exception while triggering push operation"
+	//                                           message; the certificate is still typically
+	//                                           created, just asynchronously).
+	// A 2xx with no appStatusCode means AppViewX accepted the request, so we treat it as
+	// success and only poll when a requestId is available.
 	requestID, connectorID := extractPushIDs(responseObj["response"])
 	d.Set(constants.REQUEST_ID, requestID)
 	d.Set(constants.CONNECTOR_ID, connectorID)
-	if message != "" {
-		logger.Info("GCP push message: %s", message)
-	}
+	logger.Info("GCP push message: %s", message)
 
 	// Optionally wait for completion by polling the request status.
 	if d.Get(constants.WAIT_FOR_COMPLETION).(bool) {
 		if requestID == "" {
-			logger.Warn("wait_for_completion is set but AppViewX did not return a requestId; skipping wait")
+			logger.Warn("wait_for_completion is set but AppViewX did not return a requestId; the push was accepted but is not trackable - skipping wait")
 		} else {
 			waitTimeout := d.Get(constants.WAIT_TIMEOUT_SECONDS).(int)
 			pollInterval := d.Get(constants.POLL_INTERVAL_SECONDS).(int)
