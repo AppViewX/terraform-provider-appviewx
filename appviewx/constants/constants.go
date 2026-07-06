@@ -72,6 +72,11 @@ const (
 	RENEW_BEFORE            = "renew_before"
 	AUTO_REGENERATE_ENABLED = "auto_regenerate_enabled"
 
+	// Wait for issuance (appviewx_create_certificate)
+	WAIT_FOR_ISSUANCE              = "wait_for_issuance"
+	ISSUANCE_TIMEOUT_SECONDS       = "issuance_timeout_seconds"
+	ISSUANCE_POLL_INTERVAL_SECONDS = "issuance_poll_interval_seconds"
+
 	// Revoke on destroy (appviewx_create_certificate)
 	REVOKE_ON_DESTROY = "revoke_on_destroy"
 	REVOKE_REASON     = "revoke_reason"

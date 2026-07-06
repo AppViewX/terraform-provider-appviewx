@@ -140,6 +140,24 @@ func ResourceCertificateServer() *schema.Resource {
 				Optional: true,
 				Default:  false,
 			},
+			constants.WAIT_FOR_ISSUANCE: &schema.Schema{
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				Description: "Block until the certificate is issued (polls the create request). Recommended when a dependent resource pushes the certificate in the same apply.",
+			},
+			constants.ISSUANCE_TIMEOUT_SECONDS: &schema.Schema{
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      600,
+				ValidateFunc: validation.IntAtLeast(1),
+			},
+			constants.ISSUANCE_POLL_INTERVAL_SECONDS: &schema.Schema{
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      10,
+				ValidateFunc: validation.IntAtLeast(1),
+			},
 			constants.REVOKE_ON_DESTROY: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
@@ -324,6 +342,22 @@ func resourceCertificateServerCreate(resourceData *schema.ResourceData, m interf
 	resourceData.Set(constants.RESOURCE_ID, resourceID)
 	resourceData.SetId(resourceID)
 	log.Println("[INFO] resource_id data is set in payload")
+
+	// Optionally block until the certificate is actually issued. Create is async
+	// (returns 202 as soon as the request is submitted), so a dependent resource -
+	// e.g. appviewx_push_gcp_certificate_manager - can otherwise race ahead of
+	// issuance and fail to push. Poll the create requestId to completion first.
+	if resourceData.Get(constants.WAIT_FOR_ISSUANCE).(bool) {
+		requestID := result.Response["requestId"]
+		if requestID == "" {
+			return errors.New("[ERROR] wait_for_issuance is set but the certificate create response did not include a requestId")
+		}
+		issuanceTimeout := resourceData.Get(constants.ISSUANCE_TIMEOUT_SECONDS).(int)
+		issuancePoll := resourceData.Get(constants.ISSUANCE_POLL_INTERVAL_SECONDS).(int)
+		if err := waitForRequestCompletion(configAppViewXEnvironment, appviewxSessionID, accessToken, "WEB", requestID, "certificate issuance", issuanceTimeout, issuancePoll); err != nil {
+			return err
+		}
+	}
 
 	if resourceData.Get(constants.IS_SYNC) == nil || !resourceData.Get(constants.IS_SYNC).(bool) {
 		log.Println("[INFO] Certificate is created in ASYNC mode so download can be done once the certificate is issued.")

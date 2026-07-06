@@ -319,7 +319,7 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 		} else {
 			waitTimeout := d.Get(constants.WAIT_TIMEOUT_SECONDS).(int)
 			pollInterval := d.Get(constants.POLL_INTERVAL_SECONDS).(int)
-			if err := waitForPushCompletion(configAppViewXEnvironment, appviewxSessionID, accessToken, appviewxGwSource, requestID, waitTimeout, pollInterval); err != nil {
+			if err := waitForRequestCompletion(configAppViewXEnvironment, appviewxSessionID, accessToken, appviewxGwSource, requestID, "gcp push", waitTimeout, pollInterval); err != nil {
 				return err
 			}
 		}
@@ -334,34 +334,37 @@ func resourcePushGCPCertificateManagerCreate(d *schema.ResourceData, m interface
 	return nil
 }
 
-func waitForPushCompletion(cfg *config.AppViewXEnvironment, sessionID, accessToken, gwSource, requestID string, waitTimeoutSeconds, pollIntervalSeconds int) error {
-	logger.Info("Waiting for GCP push completion (requestId=%s, timeout=%ds)", requestID, waitTimeoutSeconds)
+// waitForRequestCompletion polls an AppViewX workflow requestId until it completes
+// (success or failure) or the timeout elapses. label is used only for log/error text
+// (e.g. "gcp push", "certificate issuance").
+func waitForRequestCompletion(cfg *config.AppViewXEnvironment, sessionID, accessToken, gwSource, requestID, label string, waitTimeoutSeconds, pollIntervalSeconds int) error {
+	logger.Info("Waiting for %s completion (requestId=%s, timeout=%ds)", label, requestID, waitTimeoutSeconds)
 	deadline := time.Now().Add(time.Duration(waitTimeoutSeconds) * time.Second)
 
 	for {
 		statusCode, body, err := pollWorkflowStatus(cfg.AppViewXEnvironmentIP, cfg.AppViewXEnvironmentPort, cfg.AppViewXIsHTTPS, sessionID, accessToken, requestID, gwSource)
 		if err != nil {
-			return fmt.Errorf("error polling push status: %v", err)
+			return fmt.Errorf("error polling %s status: %v", label, err)
 		}
 		if statusCode < 200 || statusCode >= 300 {
-			return fmt.Errorf("error polling push status, http %d: %s", statusCode, string(body))
+			return fmt.Errorf("error polling %s status, http %d: %s", label, statusCode, string(body))
 		}
 
 		var responseObj map[string]interface{}
 		if err := json.Unmarshal(body, &responseObj); err != nil {
-			return fmt.Errorf("error parsing push status response: %v", err)
+			return fmt.Errorf("error parsing %s status response: %v", label, err)
 		}
 		code, completed := getWorkflowStatusCode(responseObj)
 		if completed {
 			if code == STATUS_SUCCESS {
-				logger.Info("GCP push completed successfully (requestId=%s)", requestID)
+				logger.Info("%s completed successfully (requestId=%s)", label, requestID)
 				return nil
 			}
-			return fmt.Errorf("gcp push failed with status code %d (requestId=%s): %s", code, requestID, string(body))
+			return fmt.Errorf("%s failed with status code %d (requestId=%s): %s", label, code, requestID, string(body))
 		}
 
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %ds waiting for gcp push to complete (requestId=%s)", waitTimeoutSeconds, requestID)
+			return fmt.Errorf("timed out after %ds waiting for %s to complete (requestId=%s)", waitTimeoutSeconds, label, requestID)
 		}
 		time.Sleep(time.Duration(pollIntervalSeconds) * time.Second)
 	}
