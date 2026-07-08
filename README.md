@@ -1,5 +1,15 @@
 # terraform-provider-appviewx
 
+## Resources
+
+This provider supports the following resources:
+
+- **`appviewx_create_certificate`** - Create certificates via AppViewX. Supports auto-renewal (`is_auto_renewal`, `renew_before`, `auto_regenerate_enabled`) and revoke-on-destroy (`revoke_on_destroy`, `revoke_reason`, `revoke_comments`).
+- **`appviewx_download_certificate`** - Download an AppViewX certificate and private key.
+- **`appviewx_push_gcp_certificate_manager`** - Push an AppViewX certificate to GCP Certificate Manager.
+
+For detailed documentation, see `docs/resources/`.
+
 ## Build
 ```
 > cd ../terraform-provider-appviewx

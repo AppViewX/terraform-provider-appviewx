@@ -6,3 +6,8 @@
 **/.terraform/*
 **/.vscode/*
 dev
+
+.hq-docs/
+docs/superpowers/
+alec-test/
+terraform-provider-appviewx

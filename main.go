@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	version     = "1.0.9"
-	releaseDate = "Nov 21, 2025"
-	description = "Metadata and Terraform destroy updation"
+	version     = "1.1.1"
+	releaseDate = "Jul 8, 2026"
+	description = "Force re-create appviewx_create_certificate on certificate-defining changes"
 )
 
 func init() {
