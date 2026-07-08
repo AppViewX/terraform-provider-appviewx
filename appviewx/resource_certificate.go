@@ -34,81 +34,100 @@ func ResourceCertificateServer() *schema.Resource {
 			constants.COMMON_NAME: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.HASH_FUNCTION: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.KEY_TYPE: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.BIT_LENGTH: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.DNS_NAMES: &schema.Schema{
 				Type:     schema.TypeList,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CUSTOM_FIELDS: &schema.Schema{
 				Type:     schema.TypeMap,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.VENDOR_SPECIFIC_FIELDS: &schema.Schema{
 				Type:     schema.TypeMap,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_AUTHORITY: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_GROUP_NAME: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CA_SETTING_NAME: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_TYPE: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.VALIDITY: &schema.Schema{
 				Type:     schema.TypeInt,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.VALIDITY_UNIT: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.VALIDITY_UNIT_VALUE: &schema.Schema{
 				Type:     schema.TypeInt,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.IS_SYNC: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_DOWNLOAD_PATH: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_DOWNLOAD_FORMAT: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_DOWNLOAD_PASSWORD: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.CERTIFICATE_CHAIN_REQUIRED: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.RESOURCE_ID: &schema.Schema{
 				Type:     schema.TypeString,
@@ -117,44 +136,53 @@ func ResourceCertificateServer() *schema.Resource {
 			constants.KEY_DOWNLOAD_PATH: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.KEY_DOWNLOAD_PASSWORD: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.DOWNLOAD_PASSWORD_PROTECTED_KEY: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.IS_AUTO_RENEWAL: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				ForceNew: true,
 				Default:  false,
 			},
 			constants.RENEW_BEFORE: &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 			},
 			constants.AUTO_REGENERATE_ENABLED: &schema.Schema{
 				Type:     schema.TypeBool,
 				Optional: true,
+				ForceNew: true,
 				Default:  false,
 			},
 			constants.WAIT_FOR_ISSUANCE: &schema.Schema{
 				Type:        schema.TypeBool,
 				Optional:    true,
+				ForceNew:    true,
 				Default:     false,
 				Description: "Block until the certificate is issued (polls the create request). Recommended when a dependent resource pushes the certificate in the same apply.",
 			},
 			constants.ISSUANCE_TIMEOUT_SECONDS: &schema.Schema{
 				Type:         schema.TypeInt,
 				Optional:     true,
+				ForceNew:     true,
 				Default:      600,
 				ValidateFunc: validation.IntAtLeast(1),
 			},
 			constants.ISSUANCE_POLL_INTERVAL_SECONDS: &schema.Schema{
 				Type:         schema.TypeInt,
 				Optional:     true,
+				ForceNew:     true,
 				Default:      10,
 				ValidateFunc: validation.IntAtLeast(1),
 			},
@@ -205,9 +233,14 @@ func resourceCertificateServerRead(d *schema.ResourceData, m interface{}) error 
 }
 
 func resourceCertificateServerUpdate(resourceData *schema.ResourceData, m interface{}) error {
-	log.Println("[INFO]  **************** UPDATE OPERATION NOT SUPPORTED FOR THIS RESOURCE **************** ")
-	//Update implementation is empty since this resource is for the stateless generic api invocation
-	return errors.New("Update not supported")
+	// Every attribute that shapes the issued certificate is ForceNew, so changing
+	// any of those triggers a destroy+create instead of an update. The only
+	// attributes that reach this function are the destroy-time knobs
+	// (revoke_on_destroy, revoke_reason, revoke_comments), which take effect on
+	// Delete and must not re-issue the certificate. Persist them into state by
+	// returning nil (the SDK writes the new values automatically).
+	log.Println("[INFO]  **************** UPDATE OPERATION (revoke-on-destroy settings only) **************** ")
+	return nil
 }
 
 func resourceCertificateServerDelete(d *schema.ResourceData, m interface{}) error {

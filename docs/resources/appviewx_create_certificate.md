@@ -146,6 +146,16 @@ terraform import appviewx_create_certificate.createcert <resource_id>
 ```
 Replace `<resource_id>` with the actual resource ID of the certificate you want to import.
 
+## Lifecycle & Updates
+
+An issued certificate cannot be mutated in place — the attributes that define it are fixed at issuance. Every attribute that shapes the certificate (or the files written at create time) is therefore **force-new**: changing any of them causes Terraform to **destroy the old certificate resource and create a new one** (i.e. issue a fresh certificate).
+
+Force-new attributes include: `common_name`, `dns_names`, `hash_function`, `key_type`, `bit_length`, `custom_fields`, `vendor_specific_fields`, `certificate_authority`, `certificate_group_name`, `ca_setting_name`, `certificate_type`, `validity_days`, `validity_unit`, `validity_unit_value`, `is_sync`, all `*_download_*` / `certificate_chain_required` attributes, the auto-renewal attributes, and the wait-for-issuance attributes.
+
+The only attributes that update **in place** (without re-issuing the certificate) are the destroy-time revocation knobs, since they only take effect on `terraform destroy`: `revoke_on_destroy`, `revoke_reason`, `revoke_comments`.
+
+> **NOTE** If `revoke_on_destroy = true`, a force-new change revokes the existing certificate as part of the destroy step before the replacement is issued.
+
 ### Auto-renewal (optional)
 
 | Name | Default | Description |
