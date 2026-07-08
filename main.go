@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	version     = "1.1.0"
-	releaseDate = "Jul 6, 2026"
-	description = "GCP Certificate Manager push resource; certificate auto-renewal and revoke-on-destroy"
+	version     = "1.1.1"
+	releaseDate = "Jul 8, 2026"
+	description = "Force re-create appviewx_create_certificate on certificate-defining changes"
 )
 
 func init() {
