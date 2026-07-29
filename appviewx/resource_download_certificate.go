@@ -97,7 +97,7 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 			return nil
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the access token due to : ", err)
 			return nil

@@ -1,9 +1,11 @@
-provider "appviewx"{
-	appviewx_client_id="<client id>"
-	appviewx_client_secret="<client secret>"
-	appviewx_environment_is_https=true
-	appviewx_environment_ip="<hostname>"
-	appviewx_environment_port="<port>"
+# Credentials are loaded from terraform.tfvars (copied from credentials.auto.tfvars.example).
+# To rotate an expired client_secret, update the value in terraform.tfvars and re-run terraform apply.
+provider "appviewx" {
+  appviewx_client_id            = var.appviewx_client_id
+  appviewx_client_secret        = var.appviewx_client_secret
+  appviewx_environment_is_https = var.appviewx_environment_is_https
+  appviewx_environment_ip       = var.appviewx_environment_ip
+  appviewx_environment_port     = var.appviewx_environment_port
 }
 
 resource "appviewx_create_certificate" "createcert"{

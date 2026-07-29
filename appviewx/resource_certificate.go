@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 
 	"terraform-provider-appviewx/appviewx/config"
 	"terraform-provider-appviewx/appviewx/constants"
+	"terraform-provider-appviewx/appviewx/fileops"
 )
 
 func ResourceCertificateServer() *schema.Resource {
@@ -185,7 +185,7 @@ func resourceCertificateServerCreate(resourceData *schema.ResourceData, m interf
 			return nil
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the access token due to : ", err)
 			return nil
@@ -287,23 +287,42 @@ func GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentI
 		log.Println("[ERROR] Error in executing the request", err)
 		return "", err
 	}
-	log.Println("[INFO] Response status code : ", resp.Status)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		responseBody, err := io.ReadAll(resp.Body)
-		if err == nil {
-			log.Println("[ERROR] Response obtained : ", string(responseBody))
-			return "", errors.New("error in getting the access token due to " + string(responseBody))
-		}
-	}
 	defer resp.Body.Close()
-	responseContents, err := ioutil.ReadAll(resp.Body)
+	log.Println("[INFO] Response status code : ", resp.Status)
+
+	// Read body once so it can be inspected before parsing.
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("[ERROR] error in reading the response body", err)
 		return "", err
 	}
 
+	// Detect expired client secret regardless of HTTP status code.
+	if strings.Contains(string(responseBody), "Client secret expired") {
+		log.Println("[ERROR] Client secret has expired: ", string(responseBody))
+		return "", errors.New(
+			"client_secret expired: " + string(responseBody) + ". " +
+				"Update 'appviewx_client_secret' in your terraform.tfvars file and re-run `terraform apply`.",
+		)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		log.Println("[ERROR] Client credentials rejected (HTTP "+strconv.Itoa(resp.StatusCode)+"): ", string(responseBody))
+		return "", errors.New(
+			"client_secret authentication failed (HTTP " + strconv.Itoa(resp.StatusCode) + "): " +
+				"appviewx_client_secret may be expired or invalid. " +
+				"Generate a new secret in the AppViewX UI, then update 'appviewx_client_secret' " +
+				"in your terraform.tfvars file and re-run `terraform apply`. " +
+				"Details: " + string(responseBody),
+		)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Println("[ERROR] Response obtained : ", string(responseBody))
+		return "", errors.New("error in getting the access token (HTTP " + strconv.Itoa(resp.StatusCode) + "): " + string(responseBody))
+	}
+
 	response := make(map[string]interface{})
-	err = json.Unmarshal(responseContents, &response)
+	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
 		log.Println("[ERROR] Error in Unmarshalling the responseContents", err)
 		return "", err
@@ -315,6 +334,114 @@ func GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentI
 	}
 	log.Println("[ERROR] Access token retrieval failed")
 	return "", errors.New("access token retrieval failed")
+}
+
+// RegenerateClientSecret calls the acctmgmt-regenerate-client-secret endpoint using the same
+// headers and query parameters as GetAccessToken and returns the newly issued client secret.
+func RegenerateClientSecret(clientId, clientSecret, ip, port, gwSource string, isHTTPS bool) (string, error) {
+	log.Println("[INFO] Requesting client secret regeneration from AppViewX")
+
+	queryParams := map[string]string{
+		constants.GW_SOURCE: gwSource,
+	}
+
+	// API requires JSON body — url-encoded body returns HTTP 415.
+	bodyMap := map[string]string{
+		"client_id":     clientId,
+		"client_secret": clientSecret,
+	}
+	bodyBytes, err := json.Marshal(bodyMap)
+	if err != nil {
+		return "", fmt.Errorf("could not marshal regenerate-client-secret payload: %w", err)
+	}
+
+	endpoint := GetURL(ip, port, constants.APPVIEWX_REGENERATE_CLIENT_SECRET_ACTION_ID, queryParams, isHTTPS)
+
+	client := &http.Client{Transport: HTTPTransport()}
+	req, err := http.NewRequest(constants.POST, endpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("could not create regenerate-client-secret request: %w", err)
+	}
+	req.Header.Set(constants.CONTENT_TYPE, constants.APPLICATION_JSON)
+	req.Header.Set(constants.ACCEPT, constants.APPLICATION_JSON)
+	req.SetBasicAuth(clientId, clientSecret)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("regenerate-client-secret request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("could not read regenerate-client-secret response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("regenerate-client-secret returned HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("could not parse regenerate-client-secret response: %w", err)
+	}
+
+	// Expected response shape: {"response": {"clientSecret": "..."}}
+	if responseVal, ok := result[constants.RESPONSE]; ok {
+		if responseMap, ok := responseVal.(map[string]interface{}); ok {
+			if secret, ok := responseMap[constants.CLIENT_SECRET_RESPONSE_KEY].(string); ok && secret != "" {
+				log.Println("[INFO] Client secret regeneration successful")
+				return secret, nil
+			}
+		}
+	}
+
+	return "", errors.New("regenerate-client-secret: 'clientSecret' not found in response")
+}
+
+// GetAccessTokenWithRotation fetches an access token.  On a 401 or 403 response it
+// automatically calls RegenerateClientSecret, persists the new secret to the .tfvars file
+// defined by configEnv.TfVarsFilePath (auto-discovered when empty), updates the in-memory
+// config, and retries GetAccessToken once with the new secret.
+func GetAccessTokenWithRotation(configEnv *config.AppViewXEnvironment, gwSource string) (string, error) {
+	token, err := GetAccessToken(
+		configEnv.AppViewXClientId, configEnv.AppViewXClientSecret,
+		configEnv.AppViewXEnvironmentIP, configEnv.AppViewXEnvironmentPort,
+		gwSource, configEnv.AppViewXIsHTTPS,
+	)
+	if err == nil {
+		return token, nil
+	}
+
+	// Only attempt rotation on authentication failures or expired secret
+	if !strings.Contains(err.Error(), "HTTP 401") &&
+		!strings.Contains(err.Error(), "HTTP 403") &&
+		!strings.Contains(err.Error(), "client_secret expired") {
+		return "", err
+	}
+
+	log.Println("[INFO] Access token request failed due to expired/invalid client secret — attempting automatic regeneration")
+	newSecret, regenErr := RegenerateClientSecret(
+		configEnv.AppViewXClientId, configEnv.AppViewXClientSecret,
+		configEnv.AppViewXEnvironmentIP, configEnv.AppViewXEnvironmentPort,
+		gwSource, configEnv.AppViewXIsHTTPS,
+	)
+	if regenErr != nil {
+		return "", fmt.Errorf("access token failed (%v); secret regeneration also failed: %w", err, regenErr)
+	}
+
+	// Persist new secret to .tfvars before updating in-memory state so it survives restarts
+	if updateErr := fileops.UpdateTfVarsClientSecret(configEnv.TfVarsFilePath, newSecret); updateErr != nil {
+		log.Printf("[WARN] New client secret obtained but could not be persisted to .tfvars: %v", updateErr)
+	}
+
+	configEnv.AppViewXClientSecret = newSecret
+	log.Println("[INFO] Retrying access token request with regenerated client secret")
+	return GetAccessToken(
+		configEnv.AppViewXClientId, newSecret,
+		configEnv.AppViewXEnvironmentIP, configEnv.AppViewXEnvironmentPort,
+		gwSource, configEnv.AppViewXIsHTTPS,
+	)
 }
 
 func createCertificate(resourceData *schema.ResourceData, configAppViewXEnvironment *config.AppViewXEnvironment, appviewxSessionID, accessToken string) (config.AppviewxCreateCertResponse, error) {
