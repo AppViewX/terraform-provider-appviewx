@@ -73,6 +73,14 @@ func Provider() *schema.Provider {
 				Sensitive:   true,
 				Description: "Default key download password (provider level) - takes priority over resource level",
 			},
+			constants.APPVIEWX_TFVARS_FILE_PATH: {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("APPVIEWX_TFVARS_FILE_PATH", nil),
+				Description: "Path to the .tfvars file that holds appviewx_client_secret. " +
+					"When provided, the file is automatically updated after a successful client secret regeneration. " +
+					"If omitted, the provider searches for terraform.tfvars or credentials.auto.tfvars in the working directory.",
+			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"appviewx_automation":                             ResourceAutomationServer(),
@@ -99,10 +107,12 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		AppViewXIsHTTPS:              d.Get(constants.APPVIEWX_ENVIRONMENT_Is_HTTPS).(bool),
 		ProviderCertDownloadPassword: d.Get(constants.CERTIFICATE_DOWNLOAD_PASSWORD).(string),
 		ProviderKeyDownloadPassword:  d.Get(constants.KEY_DOWNLOAD_PASSWORD).(string),
+		TfVarsFilePath:               d.Get(constants.APPVIEWX_TFVARS_FILE_PATH).(string),
 	}
 
 	logLevel := d.Get("log_level").(string)
 	logger.SetLevel(logLevel)
 	logger.Info("AppViewX Provider initialized with log level: %s", logLevel)
+
 	return &appviewxEnvironment, nil
 }

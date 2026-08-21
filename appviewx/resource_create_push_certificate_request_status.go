@@ -367,7 +367,7 @@ func revokeCertificateDirectly(resourceId string, d *schema.ResourceData, m inte
 		}
 		logger.Info("Successfully authenticated using session ID")
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, "WEB")
 		if err != nil {
 			logger.Error("Error in getting the access token: %v", err)
 			return err
@@ -550,7 +550,7 @@ func monitorRevocationStatus(requestId string, d *schema.ResourceData, m interfa
 			appviewxUserName, appviewxPassword,
 			appviewxClientId, appviewxClientSecret,
 			appviewxEnvironmentIP, appviewxEnvironmentPort,
-			appviewxEnvironmentIsHTTPS)
+			appviewxEnvironmentIsHTTPS, configAppViewXEnvironment)
 
 		if err != nil {
 			logger.Error("❌ Authentication failed on polling attempt %d: %v", attempt, err)
@@ -763,7 +763,7 @@ func performCertificateRevocation(serialNumber, issuerCommonName, reason, commen
 			return fmt.Errorf("authentication failed: %v", err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, "WEB")
 		if err != nil {
 			return fmt.Errorf("authentication failed: %v", err)
 		}
@@ -981,7 +981,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 			appviewxUserName, appviewxPassword,
 			appviewxClientId, appviewxClientSecret,
 			appviewxEnvironmentIP, appviewxEnvironmentPort,
-			appviewxEnvironmentIsHTTPS)
+			appviewxEnvironmentIsHTTPS, configAppViewXEnvironment)
 
 		if err != nil {
 			logger.Error(" Authentication failed on polling attempt %d: %v", attempt, err)
@@ -1100,7 +1100,7 @@ func createPushCertificateRequestStatusCreate(d *schema.ResourceData, m interfac
 	return createPushCertificateRequestStatusRead(d, m)
 }
 
-func authenticate(username, password, clientId, clientSecret, envIP, envPort string, isHTTPS bool) (string, string, error) {
+func authenticate(username, password, clientId, clientSecret, envIP, envPort string, isHTTPS bool, configEnv *config.AppViewXEnvironment) (string, string, error) {
 	var sessionID, accessToken string
 	var err error
 
@@ -1116,7 +1116,7 @@ func authenticate(username, password, clientId, clientSecret, envIP, envPort str
 
 	// If username/password failed or wasn't provided, try client ID/secret
 	if sessionID == "" && clientId != "" && clientSecret != "" {
-		accessToken, err = GetAccessToken(clientId, clientSecret, envIP, envPort, "WEB", isHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configEnv, "WEB")
 		if err != nil {
 			logger.Error(" Client credentials authentication failed")
 			return "", "", err
@@ -1989,7 +1989,7 @@ func downloadCertificateIfRequired(resourceId string, d *schema.ResourceData, m 
 			return
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, "WEB")
 		if err != nil {
 			logger.Error(" Error getting access token for certificate download: %v", err)
 			return
@@ -2075,7 +2075,7 @@ func fetchAndLogCertificateDetails(resourceId, commonName string, d *schema.Reso
 		}
 		logger.Info("Successfully authenticated using session ID")
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			logger.Error("Failed to get access token for certificate search: %v", err)
 			return

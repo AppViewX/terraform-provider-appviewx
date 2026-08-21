@@ -104,7 +104,7 @@ func resourceAutomationServerCreate(d *schema.ResourceData, m interface{}) error
 
 	// If username/password authentication failed or wasn't provided, try client ID/secret
 	if appviewxSessionID == "" && appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the access token due to : ", err)
 			return err
