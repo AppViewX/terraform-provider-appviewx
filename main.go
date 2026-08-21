@@ -11,8 +11,8 @@ import (
 
 var (
 	version     = "1.1.0"
-	releaseDate = "July, 2026"
-	description = "Terraform download certificate and key updation"
+	releaseDate = "Aug, 2026"
+	description = "Terraform Certificate Persistance in statefile based on the flag and the Service account rotation if expired"
 )
 
 func init() {

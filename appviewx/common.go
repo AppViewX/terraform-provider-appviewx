@@ -135,75 +135,81 @@ func GetDownloadFormat(resourceData *schema.ResourceData) string {
 	}
 }
 
-func GetDownloadFilePath(resourceData *schema.ResourceData, commonName, downloadFormat string) string {
+func GetDownloadFilePath(resourceData *schema.ResourceData, commonName, downloadFormat string) (string, error) {
 	workingDir, _ := os.Getwd()
 	if resourceData.Get(constants.CERTIFICATE_DOWNLOAD_PATH) == nil && resourceData.Get(constants.COMMON_NAME) != nil {
 		log.Println("[INFO] " + "Download path not provided hence saving file in current working directory with common name")
-		return workingDir + commonName + "." + strings.ToLower(downloadFormat)
+		return workingDir + commonName + "." + strings.ToLower(downloadFormat), nil
 	} else {
 		downloadPath := resourceData.Get(constants.CERTIFICATE_DOWNLOAD_PATH).(string)
 		log.Println("[INFO] Download path provided = ", downloadPath)
-		fileInfo, err := os.Stat(downloadPath)
-		if err == nil {
-			if fileInfo.IsDir() {
-				log.Println("[INFO] " + downloadPath + " is a directory hence saving file with common name")
-				return downloadPath + commonName + "." + strings.ToLower(downloadFormat)
-			} else {
-				log.Println("[INFO] " + downloadPath + " is a file hence saving file with provided file name")
-				return downloadPath + "." + strings.ToLower(downloadFormat)
-			}
-		} else if os.IsNotExist(err) {
-			parentDir := filepath.Dir(downloadPath)
-			fileInfo, _ := os.Stat(parentDir)
-			if !fileInfo.IsDir() {
-				log.Println("[INFO] Directory : " + parentDir + " does not exist, creating directory and saving file with common name")
-				err := os.MkdirAll(parentDir, 0755)
-				if err != nil {
-					log.Println("[INFO] Error creating directory: "+parentDir+" due to : ", err)
-					return downloadPath + "." + strings.ToLower(downloadFormat)
-				}
-				log.Println("[INFO] Created a directory " + parentDir + " and saving file with provided file name")
-			} else {
-				log.Println("[INFO] Directory : " + parentDir + " already exists, saving file with provided file name")
-			}
+		
+		// Validate that the target directory exists and is accessible
+		parentDir := filepath.Dir(downloadPath)
+		if parentDir == "" || parentDir == "." {
+			parentDir = workingDir
 		}
-		return downloadPath + "." + strings.ToLower(downloadFormat)
+		
+		fileInfo, err := os.Stat(parentDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Println("[ERROR] Invalid certificate download path: directory does not exist: " + parentDir)
+				log.Println("[ERROR] Cannot write to path: " + downloadPath)
+				log.Println("[ERROR] Check file permissions and directory access")
+				return "", errors.New("invalid certificate download path: directory does not exist: " + parentDir)
+			}
+			log.Println("[ERROR] Cannot access directory: " + parentDir + " (error: " + err.Error() + ")")
+			return "", errors.New("cannot access directory: " + parentDir + " (error: " + err.Error() + ")")
+		}
+		
+		if !fileInfo.IsDir() {
+			log.Println("[ERROR] Path is not a directory: " + parentDir)
+			return "", errors.New("path is not a directory: " + parentDir)
+		}
+		
+		// Path exists and is a valid directory - return full file path
+		fullPath := filepath.Join(parentDir, commonName + "." + strings.ToLower(downloadFormat))
+		log.Println("[INFO] Certificate will be saved to: " + fullPath)
+		return fullPath, nil
 	}
 }
 
-func GetDownloadFilePathForKey(resourceData *schema.ResourceData, commonName, downloadFormat string) string {
+func GetDownloadFilePathForKey(resourceData *schema.ResourceData, commonName, downloadFormat string) (string, error) {
 	workingDir, _ := os.Getwd()
 	if resourceData.Get(constants.KEY_DOWNLOAD_PATH) == nil && resourceData.Get(constants.COMMON_NAME) != nil {
 		log.Println("[INFO] " + "Download path not provided hence saving file in current working directory with common name")
-		return workingDir + commonName + "." + strings.ToLower(downloadFormat)
+		return workingDir + commonName + "." + strings.ToLower(downloadFormat), nil
 	} else {
 		downloadPath := resourceData.Get(constants.KEY_DOWNLOAD_PATH).(string)
 		log.Println("[INFO] Download path provided = ", downloadPath)
-		fileInfo, err := os.Stat(downloadPath)
-		if err == nil {
-			if fileInfo.IsDir() {
-				log.Println("[INFO] " + downloadPath + " is a directory hence saving file with common name")
-				return downloadPath + commonName + "." + strings.ToLower(downloadFormat)
-			} else {
-				log.Println("[INFO] " + downloadPath + " is a file hence saving file with provided file name")
-				return downloadPath + "." + strings.ToLower(downloadFormat)
-			}
-		} else if os.IsNotExist(err) {
-			parentDir := filepath.Dir(downloadPath)
-			fileInfo, _ := os.Stat(parentDir)
-			if !fileInfo.IsDir() {
-				log.Println("[INFO] Directory : " + parentDir + " does not exist, creating directory and saving file with common name")
-				err := os.MkdirAll(parentDir, 0755)
-				if err != nil {
-					log.Println("[INFO] Error creating directory: "+parentDir+" due to : ", err)
-					return downloadPath + "." + strings.ToLower(downloadFormat)
-				}
-				log.Println("[INFO] Created a directory " + parentDir + " and saving file with provided file name")
-			} else {
-				log.Println("[INFO] Directory : " + parentDir + " already exists, saving file with provided file name")
-			}
+		
+		// Validate that the target directory exists and is accessible
+		parentDir := filepath.Dir(downloadPath)
+		if parentDir == "" || parentDir == "." {
+			parentDir = workingDir
 		}
-		return downloadPath + "." + strings.ToLower(downloadFormat)
+		
+		fileInfo, err := os.Stat(parentDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Println("[ERROR] Invalid key download path: directory does not exist: " + parentDir)
+				log.Println("[ERROR] Cannot write to path: " + downloadPath)
+				log.Println("[ERROR] Check file permissions and directory access")
+				return "", errors.New("invalid key download path: directory does not exist: " + parentDir)
+			}
+			log.Println("[ERROR] Cannot access directory: " + parentDir + " (error: " + err.Error() + ")")
+			return "", errors.New("cannot access directory: " + parentDir + " (error: " + err.Error() + ")")
+		}
+		
+		if !fileInfo.IsDir() {
+			log.Println("[ERROR] Path is not a directory: " + parentDir)
+			return "", errors.New("path is not a directory: " + parentDir)
+		}
+		
+		// Path exists and is a valid directory - return full file path
+		fullPath := filepath.Join(parentDir, commonName + "." + strings.ToLower(downloadFormat))
+		log.Println("[INFO] Private key will be saved to: " + fullPath)
+		return fullPath, nil
 	}
 }
 
@@ -218,7 +224,37 @@ func GetDownloadPassword(resourceData *schema.ResourceData, downloadFormat strin
 	return "", true
 }
 
+// validateAndGetDirectoryPath checks if the directory for the given file path is accessible.
+// Returns the directory path if valid, otherwise returns error details.
+func validateAndGetDirectoryPath(filePath string) (string, error) {
+	if filePath == "" {
+		return "", fmt.Errorf("file path is empty")
+	}
+	dir := filepath.Dir(filePath)
+	if dir == "" || dir == "." {
+		dir = "."
+	}
+	fileInfo, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("directory does not exist: %s", dir)
+		}
+		return "", fmt.Errorf("cannot access directory: %s (error: %v)", dir, err)
+	}
+	if !fileInfo.IsDir() {
+		return "", fmt.Errorf("path is not a directory: %s", dir)
+	}
+	return dir, nil
+}
+
 func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath string, isChainRequired bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) bool {
+	// Validate file path before attempting download
+	if _, err := validateAndGetDirectoryPath(downloadPath); err != nil {
+		log.Println("[ERROR] Invalid certificate download path: " + err.Error())
+		log.Println("[ERROR] Certificate file cannot be written to: " + downloadPath)
+		return false
+	}
+
 	httpMethod := config.HTTPMethodPost
 	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
 	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
@@ -273,7 +309,9 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 	} else {
 		err = os.WriteFile(downloadPath, responseByte, 0777)
 		if err != nil {
-			log.Println("[ERROR] Error while downloading the certificate file content in ", downloadPath, " due to : ", err)
+			log.Println("[ERROR] Failed to write certificate file: " + err.Error())
+			log.Println("[ERROR] Cannot write to path: " + downloadPath)
+			log.Println("[ERROR] Check file permissions and directory access")
 			return false
 		} else {
 			log.Println("[INFO] Downloaded certificate file and available in ", downloadPath)
@@ -285,7 +323,11 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 
 func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) error {
 	commonName := resourceData.Get(constants.COMMON_NAME).(string)
-	downloadPath := GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
+	downloadPath, err := GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
+	if err != nil {
+		log.Println("[ERROR] Failed to validate key download path: " + err.Error())
+		return err
+	}
 	providerKeyPassword := configAppViewXEnvironment.ProviderKeyDownloadPassword
 	resourceKeyPassword := resourceData.Get(constants.KEY_DOWNLOAD_PASSWORD).(string)
 	downloadPassword := getPasswordWithPriority(providerKeyPassword, resourceKeyPassword)
@@ -314,6 +356,13 @@ func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionI
 }
 
 func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downloadPasswordProtectedKey bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) bool {
+	// Validate file path before attempting download
+	if _, err := validateAndGetDirectoryPath(downloadPath); err != nil {
+		log.Println("[ERROR] Invalid key download path: " + err.Error())
+		log.Println("[ERROR] Key file cannot be written to: " + downloadPath)
+		return false
+	}
+
 	httpMethod := config.HTTPMethodPost
 	var response config.AppviewxDownloadKeyResponse
 	var responseByte []byte
@@ -389,42 +438,58 @@ func downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath string, downlo
 }
 
 func decryptPasswordProtectedKeyAndDownloadKey(encryptedPrivateKey, password string, downloadPath string) error {
+	// Validate output path before attempting to write
+	if _, err := validateAndGetDirectoryPath(downloadPath); err != nil {
+		log.Println("[ERROR] Invalid key output path: " + err.Error())
+		log.Println("[ERROR] Cannot write decrypted key to: " + downloadPath)
+		return errors.New("invalid key download path: " + err.Error())
+	}
+
 	log.Println("[INFO] Decrypting the password protected private key file content")
 	tempFile := filepath.Join(os.TempDir(), "temp_private_key.pem")
 	var file *os.File
 	var err error
 	file, err = os.Create(tempFile)
 	if err != nil {
-		fmt.Println("Error creating temp file:", err)
-		return errors.New("error while decrypting the private key file content")
+		log.Println("[ERROR] Error creating temp file: " + err.Error())
+		return errors.New("cannot create temporary file for key decryption: " + err.Error())
 	}
 	defer file.Close()
 	defer os.Remove(tempFile)
 
 	_, err = file.WriteString(encryptedPrivateKey)
 	if err != nil {
-		fmt.Println("Error writing to file:", err)
-		return errors.New("error while decrypting the private key file content")
+		log.Println("[ERROR] Error writing to temp file: " + err.Error())
+		return errors.New("error preparing key for decryption: " + err.Error())
 	}
 	cmd := exec.Command("openssl", "pkey", "-in", tempFile, "-out", downloadPath, "-passin", "pass:"+password)
 
 	err = cmd.Run()
 	if err != nil {
 		log.Printf("[ERROR] Error executing OpenSSL command: %v\n", err)
-		return errors.New("error while decrypting the private key file content")
+		log.Println("[ERROR] Failed to decrypt private key. Ensure OpenSSL is installed and password is correct.")
+		return errors.New("error while decrypting the private key: " + err.Error())
 	}
 	log.Println("[INFO] Private key decrypted successfully and saved in the specified path")
 	return nil
 }
 
 func writeKeyToFile(downloadPath string, fileContent []byte) error {
-	if err := os.WriteFile(downloadPath, fileContent, 0777); err != nil {
-		log.Println("[ERROR] Error while downloading the private key file content in ", downloadPath, " due to : ", err)
-		return errors.New("[ERROR] Error while downloading the private key file content in " + downloadPath + " due to : " + err.Error())
-	} else {
-		log.Println("[INFO] Downloaded private key file and available in ", downloadPath)
-		return nil
+	// Validate path before attempting to write
+	if _, err := validateAndGetDirectoryPath(downloadPath); err != nil {
+		log.Println("[ERROR] Invalid key file path: " + err.Error())
+		log.Println("[ERROR] Cannot write key to: " + downloadPath)
+		return errors.New("invalid key file path: " + err.Error())
 	}
+
+	if err := os.WriteFile(downloadPath, fileContent, 0777); err != nil {
+		log.Println("[ERROR] Failed to write key file: " + err.Error())
+		log.Println("[ERROR] Cannot write to path: " + downloadPath)
+		log.Println("[ERROR] Check file permissions and directory access")
+		return errors.New("failed to write key file: " + err.Error())
+	}
+	log.Println("[INFO] Downloaded private key file and available in ", downloadPath)
+	return nil
 }
 
 func searchCertificate(resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) config.AppviewxSearchCertResponse {
@@ -493,6 +558,190 @@ func frameSearchCertificatePayload(resourceId string) config.SearchCertificatePa
 	payload.Filter.SortOrder = "asc"
 	payload.Input.ResourceId = resourceId
 	return payload
+}
+
+// downloadCertificateContentFromAppviewx fetches certificate content without writing to file
+// Returns (content as string, success as bool, error message if any)
+func downloadCertificateContentFromAppviewx(appviewxResourceId, commonName, serialNumber, downloadFormat, downloadPassword string, isChainRequired bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) (string, bool, string) {
+	httpMethod := config.HTTPMethodPost
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+	headers := frameHeaders()
+	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, config.DownloadCertificateActionId, frameQueryParams(), appviewxEnvironmentIsHTTPS)
+	payload := frameDownloadCertificatePayload(appviewxResourceId, commonName, serialNumber, downloadFormat, downloadPassword, isChainRequired)
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("[ERROR] error in Marshalling the payload ", payload, err)
+		return "", false, "Error marshalling payload"
+	}
+	client := &http.Client{Transport: HTTPTransport()}
+
+	printRequest(httpMethod, url, headers, requestBody)
+
+	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Println("[ERROR] error in creating new Request", err)
+		return "", false, "Error creating HTTP request"
+	}
+
+	for key, value := range headers {
+		value1 := fmt.Sprintf("%v", value)
+		key1 := fmt.Sprintf("%v", key)
+		req.Header.Add(key1, value1)
+	}
+	if appviewxSessionID != "" {
+		req.Header.Add(constants.SESSION_ID, appviewxSessionID)
+	} else {
+		req.Header.Add(constants.TOKEN, appviewxAccessToken)
+	}
+	httpResponse, err := client.Do(req)
+	if err != nil {
+		log.Println("[ERROR] error in http request", err)
+		return "", false, "Error making HTTP request"
+	} else {
+		log.Println("[INFO] Request for downloading the certificate submitted successfully")
+	}
+	log.Println("[INFO] Response status code : ", httpResponse.Status)
+	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
+		responseBody, err := io.ReadAll(httpResponse.Body)
+		if err == nil {
+			errMsg := string(responseBody)
+			log.Println("[ERROR] Response obtained : ", errMsg)
+			return "", false, "Error response from server"
+		}
+		return "", false, "Error response from server"
+	}
+	responseByte, err := io.ReadAll(httpResponse.Body)
+	if err != nil {
+		log.Println("[ERROR] ", err)
+		return "", false, "Error reading response body"
+	}
+	log.Println("[INFO] Downloaded certificate content successfully")
+	return string(responseByte), true, ""
+}
+
+// downloadKeyContentFromAppviewx fetches private key content without writing to file
+// Returns (key content as string, success as bool, error message if any)
+func downloadKeyContentFromAppviewx(uuid, downloadPassword string, downloadPasswordProtectedKey bool, appviewxSessionID, appviewxAccessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) (string, bool, string) {
+	httpMethod := config.HTTPMethodPost
+	var response config.AppviewxDownloadKeyResponse
+	var responseByte []byte
+	appviewxEnvironmentIP := configAppViewXEnvironment.AppViewXEnvironmentIP
+	appviewxEnvironmentPort := configAppViewXEnvironment.AppViewXEnvironmentPort
+	appviewxEnvironmentIsHTTPS := configAppViewXEnvironment.AppViewXIsHTTPS
+	headers := frameHeaders()
+	url := GetURL(appviewxEnvironmentIP, appviewxEnvironmentPort, config.DownloadKeyActionId, frameQueryParams(), appviewxEnvironmentIsHTTPS)
+	payload := frameDownloadKeyPayload(uuid, downloadPassword)
+	requestBody, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("[ERROR] error in Marshalling the payload ", payload, err)
+		return "", false, "Error marshalling payload"
+	}
+	client := &http.Client{Transport: HTTPTransport()}
+
+	printRequest(httpMethod, url, headers, requestBody)
+
+	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Println("[ERROR] error in creating new Request", err)
+		return "", false, "Error creating HTTP request"
+	}
+
+	for key, value := range headers {
+		value1 := fmt.Sprintf("%v", value)
+		key1 := fmt.Sprintf("%v", key)
+		req.Header.Add(key1, value1)
+	}
+	if appviewxSessionID != "" {
+		req.Header.Add(constants.SESSION_ID, appviewxSessionID)
+	} else {
+		req.Header.Add(constants.TOKEN, appviewxAccessToken)
+	}
+	httpResponse, err := client.Do(req)
+	if err != nil {
+		log.Println("[ERROR] error in http request", err)
+		return "", false, "Error making HTTP request"
+	} else {
+		log.Println("[INFO] Request for downloading the private key submitted successfully")
+	}
+	log.Println("[INFO] Response status code : ", httpResponse.Status)
+	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
+		responseBody, err := io.ReadAll(httpResponse.Body)
+		if err == nil {
+			log.Println("[ERROR] Response obtained : ", string(responseBody))
+			return "", false, "Error response from server"
+		}
+		return "", false, "Error response from server"
+	}
+	if responseByte, err = io.ReadAll(httpResponse.Body); err != nil {
+		log.Println("[ERROR] Error while obtaining the response due to : ", err)
+		return "", false, "Error reading response body"
+	}
+	if err = json.Unmarshal(responseByte, &response); err != nil {
+		log.Println("[ERROR] Error while obtaining the response due to : ", err)
+		return "", false, "Error parsing response JSON"
+	} else if response.AppviewxResponse.Status == "Success" {
+		if downloadPasswordProtectedKey {
+			log.Println("[INFO] Using password protected private key content")
+			// Return the encrypted key as-is
+			return response.AppviewxResponse.PrivateKey, true, ""
+		} else {
+			// Decrypt the key and return the decrypted content
+			decryptedKey, err := decryptPasswordProtectedKey(response.AppviewxResponse.PrivateKey, downloadPassword)
+			if err != nil {
+				log.Println("[ERROR] Error decrypting private key: ", err)
+				return "", false, "Error decrypting private key"
+			}
+			return decryptedKey, true, ""
+		}
+	} else {
+		log.Println("[ERROR] Error while obtaining the response due to : ", response.AppviewxResponse.Status)
+		return "", false, "Error response from server"
+	}
+}
+
+// decryptPasswordProtectedKey decrypts a password-protected key and returns the decrypted content as string
+func decryptPasswordProtectedKey(encryptedPrivateKey, password string) (string, error) {
+	log.Println("[INFO] Decrypting the password protected private key content")
+	tempFile := filepath.Join(os.TempDir(), "temp_private_key.pem")
+	var file *os.File
+	var err error
+	file, err = os.Create(tempFile)
+	if err != nil {
+		fmt.Println("Error creating temp file:", err)
+		return "", errors.New("error while decrypting the private key content")
+	}
+	defer file.Close()
+	defer os.Remove(tempFile)
+
+	_, err = file.WriteString(encryptedPrivateKey)
+	if err != nil {
+		fmt.Println("Error writing to file:", err)
+		return "", errors.New("error while decrypting the private key content")
+	}
+
+	// Create a temporary output file for the decrypted key
+	decryptedFile := filepath.Join(os.TempDir(), "decrypted_private_key.pem")
+	defer os.Remove(decryptedFile)
+
+	cmd := exec.Command("openssl", "pkey", "-in", tempFile, "-out", decryptedFile, "-passin", "pass:"+password)
+
+	err = cmd.Run()
+	if err != nil {
+		log.Printf("[ERROR] Error executing OpenSSL command: %v\n", err)
+		return "", errors.New("error while decrypting the private key content")
+	}
+
+	// Read the decrypted key content
+	decryptedKeyBytes, err := os.ReadFile(decryptedFile)
+	if err != nil {
+		log.Printf("[ERROR] Error reading decrypted key: %v\n", err)
+		return "", errors.New("error while reading decrypted private key")
+	}
+
+	log.Println("[INFO] Private key decrypted successfully")
+	return string(decryptedKeyBytes), nil
 }
 
 func frameDownloadCertificatePayload(appviewxResourceId, commonName, serialNumber, format, password string, isChainRequired bool) config.DownloadCertificatePayload {

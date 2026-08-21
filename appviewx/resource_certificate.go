@@ -182,13 +182,13 @@ func resourceCertificateServerCreate(resourceData *schema.ResourceData, m interf
 		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the session due to : ", err)
-			return nil
+			return fmt.Errorf("failed to authenticate: %w", err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
 		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the access token due to : ", err)
-			return nil
+			return fmt.Errorf("failed to authenticate: %w", err)
 		}
 	}
 
@@ -232,7 +232,11 @@ func downloadCertificate(resourceData *schema.ResourceData, resourceID string, a
 	commonName := resourceData.Get(constants.COMMON_NAME).(string)
 
 	downloadFormat := GetDownloadFormat(resourceData)
-	downloadPath := GetDownloadFilePath(resourceData, commonName, downloadFormat)
+	downloadPath, err := GetDownloadFilePath(resourceData, commonName, downloadFormat)
+	if err != nil {
+		log.Println("[ERROR] Failed to validate certificate download path: " + err.Error())
+		return err
+	}
 	if downloadPassword, ok = GetDownloadPassword(resourceData, downloadFormat, configAppViewXEnvironment); !ok {
 		return errors.New("[ERROR] Error in getting the download password")
 	}
@@ -299,21 +303,27 @@ func GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentI
 
 	// Detect expired client secret regardless of HTTP status code.
 	if strings.Contains(string(responseBody), "Client secret expired") {
-		log.Println("[ERROR] Client secret has expired: ", string(responseBody))
+		log.Println("[ERROR] Client secret has expired")
 		return "", errors.New(
-			"client_secret expired: " + string(responseBody) + ". " +
-				"Update 'appviewx_client_secret' in your terraform.tfvars file and re-run `terraform apply`.",
+			"Client secret has expired. " +
+				"The provider will attempt to regenerate it automatically. " +
+				"If regeneration fails, you must manually update your client secret:\n" +
+				"  - If using .tfvars file: Update appviewx_client_secret in terraform.tfvars\n" +
+				"  - If using environment variable: Update APPVIEWX_TERRAFORM_CLIENT_SECRET\n" +
+				"  - If using hardcoded secret in provider block: Update appviewx_client_secret in your .tf file",
 		)
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		log.Println("[ERROR] Client credentials rejected (HTTP "+strconv.Itoa(resp.StatusCode)+"): ", string(responseBody))
 		return "", errors.New(
-			"client_secret authentication failed (HTTP " + strconv.Itoa(resp.StatusCode) + "): " +
-				"appviewx_client_secret may be expired or invalid. " +
-				"Generate a new secret in the AppViewX UI, then update 'appviewx_client_secret' " +
-				"in your terraform.tfvars file and re-run `terraform apply`. " +
-				"Details: " + string(responseBody),
+			"Authentication failed (HTTP " + strconv.Itoa(resp.StatusCode) + "): " +
+				"Client credentials are invalid or expired. " +
+				"The provider will attempt automatic secret regeneration. " +
+				"Your configuration source will be updated as follows:\n" +
+				"  - .tfvars file: Will be automatically updated with the new secret\n" +
+				"  - Environment variable: A .appviewx_secret.env file will be created with the new secret\n" +
+				"  - Hardcoded provider block: You must manually update appviewx_client_secret",
 		)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -414,9 +424,14 @@ func GetAccessTokenWithRotation(configEnv *config.AppViewXEnvironment, gwSource 
 	}
 
 	// Only attempt rotation on authentication failures or expired secret
-	if !strings.Contains(err.Error(), "HTTP 401") &&
-		!strings.Contains(err.Error(), "HTTP 403") &&
-		!strings.Contains(err.Error(), "client_secret expired") {
+	// Use broad "expired" check to catch all variations: "secret expired", "secret has expired", etc.
+	isAuthError := strings.Contains(err.Error(), "HTTP 401") ||
+		strings.Contains(err.Error(), "HTTP 403")
+	isExpiredError := strings.Contains(strings.ToLower(err.Error()), "expired") ||
+		strings.Contains(err.Error(), "unauthorized")
+	
+	// If it's NOT an auth/expiry error, return immediately without attempting regeneration
+	if !isAuthError && !isExpiredError {
 		return "", err
 	}
 
@@ -427,12 +442,36 @@ func GetAccessTokenWithRotation(configEnv *config.AppViewXEnvironment, gwSource 
 		gwSource, configEnv.AppViewXIsHTTPS,
 	)
 	if regenErr != nil {
+		// If regeneration failed with 401, it means the secret has already been invalidated
+		// by a previous regeneration attempt. Provide clear guidance for different config sources.
+		if strings.Contains(regenErr.Error(), "HTTP 401") {
+			log.Println("[ERROR] ============================================================")
+			log.Println("[ERROR] CRITICAL: Client secret regeneration failed with HTTP 401")
+			log.Println("[ERROR] This typically means your secret was already regenerated")
+			log.Println("[ERROR] in a previous terraform run and is now permanently invalid.")
+			log.Println("[ERROR] ============================================================")
+			log.Println("[ERROR] HOW TO FIX:")
+			log.Println("[ERROR] 1. Log in to the AppViewX UI")
+			log.Println("[ERROR] 2. Navigate to Service Account tab in Platform")
+			log.Println("[ERROR] 3. Copy the newly generated client secret")
+			log.Println("[ERROR] 4. UPDATE your terraform configuration:")
+			log.Println("[ERROR]    - If using hardcoded secret in provider block: Update appviewx_client_secret directly in your .tf file")
+			log.Println("[ERROR]    - If using .tfvars file: Update appviewx_client_secret in terraform.tfvars")
+			log.Println("[ERROR]    - If using environment variable: Update APPVIEWX_TERRAFORM_CLIENT_SECRET and source it again")
+			log.Println("[ERROR] 5. Re-run: terraform apply")
+			log.Println("[ERROR] ============================================================")
+			return "", fmt.Errorf(
+				"Client secret is permanently invalid and cannot be auto-regenerated.\n" +
+					"Reason: Previous regeneration attempt already invalidated this secret at the AppViewX server.\n" +
+					"Solution: Manually generate a new secret in the AppViewX UI, then update your terraform configuration with the new secret.",
+			)
+		}
 		return "", fmt.Errorf("access token failed (%v); secret regeneration also failed: %w", err, regenErr)
 	}
 
 	// Persist new secret to .tfvars before updating in-memory state so it survives restarts
-	if updateErr := fileops.UpdateTfVarsClientSecret(configEnv.TfVarsFilePath, newSecret); updateErr != nil {
-		log.Printf("[WARN] New client secret obtained but could not be persisted to .tfvars: %v", updateErr)
+	if updateErr := fileops.UpdateTfVarsClientSecret(configEnv.TfVarsFilePath, configEnv.AppViewXClientId, newSecret); updateErr != nil {
+		log.Printf("[WARN] New client secret obtained but could not be persisted: %v", updateErr)
 	}
 
 	configEnv.AppViewXClientSecret = newSecret

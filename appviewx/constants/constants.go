@@ -69,6 +69,9 @@ const (
 	KEY_DOWNLOAD_PATH               = "key_download_path"
 	KEY_DOWNLOAD_PASSWORD           = "key_download_password"
 	DOWNLOAD_PASSWORD_PROTECTED_KEY = "download_password_protected_key"
+	STORE_CERTIFICATE_IN_STATE      = "store_certificate_in_state"
+	CERTIFICATE_CONTENT             = "certificate_content"
+	KEY_CONTENT                     = "key_content"
 
 	REQUEST_DATA                = "request_data"
 	SEQUENCE_NO                 = "sequence_number"

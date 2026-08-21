@@ -113,5 +113,6 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	logLevel := d.Get("log_level").(string)
 	logger.SetLevel(logLevel)
 	logger.Info("AppViewX Provider initialized with log level: %s", logLevel)
+
 	return &appviewxEnvironment, nil
 }

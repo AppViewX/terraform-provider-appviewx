@@ -69,6 +69,20 @@ func ResourceDownloadCertificateServer() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+			constants.STORE_CERTIFICATE_IN_STATE: &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+			constants.CERTIFICATE_CONTENT: &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			constants.KEY_CONTENT: &schema.Schema{
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
+			},
 		},
 	}
 }
@@ -94,23 +108,35 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 		appviewxSessionID, err = GetSession(appviewxUserName, appviewxPassword, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the session due to : ", err)
-			return nil
+			return fmt.Errorf("failed to authenticate: %w", err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
 		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			log.Println("[ERROR] Error in getting the access token due to : ", err)
-			return nil
+			return fmt.Errorf("failed to authenticate: %w", err)
 		}
 	}
 
 	commonName := resourceData.Get(constants.COMMON_NAME).(string)
 	serialNumber := resourceData.Get(constants.SERIAL_NUMBER).(string)
+	storeInState := resourceData.Get(constants.STORE_CERTIFICATE_IN_STATE).(bool)
+
 	var downloadPath, downloadFormat, downloadPassword string
 	log.Println("[INFO] CommonName =================================================================== ", commonName)
+	log.Println("[INFO] Store certificate in state =================================================================== ", storeInState)
 	var isChainRequired, ok bool
 	downloadFormat = GetDownloadFormat(resourceData)
-	downloadPath = GetDownloadFilePath(resourceData, commonName, downloadFormat)
+
+	// Only compute download path if we're writing to files
+	if !storeInState {
+		var err error
+		downloadPath, err = GetDownloadFilePath(resourceData, commonName, downloadFormat)
+		if err != nil {
+			log.Println("[ERROR] Failed to validate certificate download path: " + err.Error())
+			return fmt.Errorf("invalid certificate download path: %w", err)
+		}
+	}
 
 	// Get certificate download password with provider priority
 	providerCertPassword := configAppViewXEnvironment.ProviderCertDownloadPassword
@@ -142,19 +168,36 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 		log.Println("[ERROR] CommonName, SerialNumber or Resource ID details are not available to proceed with certificate download")
 		return errors.New("[ERROR] CommonName, SerialNumber or Resource ID details are not available to proceed with certificate download")
 	}
-	if downloadSuccess := downloadCertificateFromAppviewx(resourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
-		log.Println("[INFO] Certificate downloaded successfully in the specified path")
-		resourceData.SetId(strconv.Itoa(rand.Int()))
+
+	// Handle certificate download
+	if storeInState {
+		// Fetch certificate content and store in state
+		certContent, success, errMsg := downloadCertificateContentFromAppviewx(resourceId, commonName, serialNumber, downloadFormat, downloadPassword, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment)
+		if !success {
+			log.Println("[ERROR] Certificate download failed: " + errMsg)
+			return errors.New("[ERROR] Certificate was not downloaded: " + errMsg)
+		}
+		resourceData.Set(constants.CERTIFICATE_CONTENT, certContent)
+		log.Println("[INFO] Certificate content stored in Terraform state")
 	} else {
-		log.Println("[ERROR] Certificate was not downloaded in the specified path")
-		return errors.New("[ERROR] Certificate was not downloaded in the specified path")
+		// Use existing file-based behavior
+		if downloadSuccess := downloadCertificateFromAppviewx(resourceId, commonName, serialNumber, downloadFormat, downloadPassword, downloadPath, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+			log.Println("[INFO] Certificate downloaded successfully in the specified path")
+		} else {
+			log.Println("[ERROR] Certificate was not downloaded in the specified path")
+			return errors.New("[ERROR] Certificate was not downloaded in the specified path")
+		}
 	}
-	if resourceData.Get(constants.KEY_DOWNLOAD_PATH) != "" {
-		log.Println("[INFO] Key download path is provided in the payload hence proceeding with key download")
-		if err := downloadKeyWithPriority(resourceData, commonName, serialNumber, resourceId, appviewxSessionID, accessToken, configAppViewXEnvironment); err != nil {
+
+	// Handle key download (only if key_download_path is provided for file mode, or for state mode)
+	if resourceData.Get(constants.KEY_DOWNLOAD_PATH) != "" || storeInState {
+		log.Println("[INFO] Key download requested")
+		if err := downloadKeyWithPriority(resourceData, commonName, serialNumber, resourceId, appviewxSessionID, accessToken, configAppViewXEnvironment, storeInState); err != nil {
 			return err
 		}
 	}
+
+	resourceData.SetId(strconv.Itoa(rand.Int()))
 	return nil
 }
 
@@ -173,8 +216,17 @@ func getPasswordWithPriority(providerPassword, resourcePassword string) string {
 }
 
 // downloadKeyWithPriority downloads key using provider-level password priority
-func downloadKeyWithPriority(resourceData *schema.ResourceData, commonName, serialNumber, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) error {
-	downloadPath := GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
+// When storeInState is true, stores the key content in Terraform state instead of writing to file
+func downloadKeyWithPriority(resourceData *schema.ResourceData, commonName, serialNumber, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment, storeInState bool) error {
+	downloadPath := ""
+	if !storeInState {
+		var err error
+		downloadPath, err = GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
+		if err != nil {
+			log.Println("[ERROR] Failed to validate key download path: " + err.Error())
+			return fmt.Errorf("invalid key download path: %w", err)
+		}
+	}
 
 	// Get key download password with provider priority
 	providerKeyPassword := configAppViewXEnvironment.ProviderKeyDownloadPassword
@@ -188,7 +240,7 @@ func downloadKeyWithPriority(resourceData *schema.ResourceData, commonName, seri
 		return errors.New("[ERROR] Password not found for private key download at provider or resource level")
 	}
 
-	// Use the existing downloadKeyFromAppviewx function with the priority-based password
+	// Search for certificate to get UUID
 	searchResponse := searchCertificateForDownload(resourceID, commonName, serialNumber, appviewxSessionID, accessToken, configAppViewXEnvironment)
 	if searchResponse.AppviewxResponse.ResponseObject.Objects != nil && searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID == "" {
 		log.Println("[ERROR] Cannot find the UUID for the resource id " + resourceID + " to proceed with key download")
@@ -196,12 +248,25 @@ func downloadKeyWithPriority(resourceData *schema.ResourceData, commonName, seri
 	}
 	uuid := searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID
 	log.Println("[INFO] UUID for the resource id " + resourceID + " was obtained successfully")
-	if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
-		log.Println("[INFO] Private key downloaded successfully in the specified path")
-		resourceData.SetId(strconv.Itoa(rand.Int()))
+
+	// Handle key download based on storeInState flag
+	if storeInState {
+		// Fetch key content and store in state
+		keyContent, success, errMsg := downloadKeyContentFromAppviewx(uuid, downloadPassword, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment)
+		if !success {
+			log.Println("[ERROR] Private key download failed: " + errMsg)
+			return errors.New("[ERROR] Private key was not downloaded: " + errMsg)
+		}
+		resourceData.Set(constants.KEY_CONTENT, keyContent)
+		log.Println("[INFO] Private key content stored in Terraform state")
 	} else {
-		log.Println("[ERROR] Private key was not downloaded in the specified path")
-		return errors.New("[ERROR] Private key was not downloaded in the specified path")
+		// Use existing file-based behavior
+		if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+			log.Println("[INFO] Private key downloaded successfully in the specified path")
+		} else {
+			log.Println("[ERROR] Private key was not downloaded in the specified path")
+			return errors.New("[ERROR] Private key was not downloaded in the specified path")
+		}
 	}
 	return nil
 }
