@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	version     = "1.0.9"
-	releaseDate = "Nov 21, 2025"
-	description = "Metadata and Terraform destroy updation"
+	version     = "1.1.0"
+	releaseDate = "Aug, 2026"
+	description = "Terraform Certificate Persistance in statefile based on the flag and the Service account rotation if expired"
 )
 
 func init() {

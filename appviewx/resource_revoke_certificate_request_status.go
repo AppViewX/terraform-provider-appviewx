@@ -214,7 +214,7 @@ func revokeCertificateRequestStatusCreate(d *schema.ResourceData, m interface{})
 			appviewxUserName, appviewxPassword,
 			appviewxClientId, appviewxClientSecret,
 			appviewxEnvironmentIP, appviewxEnvironmentPort,
-			appviewxEnvironmentIsHTTPS)
+			appviewxEnvironmentIsHTTPS, configAppViewXEnvironment)
 
 		if err != nil {
 			logger.Error(" Authentication failed on polling attempt %d: %v", attempt, err)

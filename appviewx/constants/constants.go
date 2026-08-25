@@ -33,8 +33,11 @@ const (
 	GRANT_TYPE              = "grant_type"
 	CLIENT_CREDENTIALS      = "client_credentials"
 
-	APPVIEWX_ACTION_ID_LOGIN            = "login"
-	APPVIEWX_GET_ACCESS_TOKEN_ACTION_ID = "acctmgmt-get-service-token"
+	APPVIEWX_ACTION_ID_LOGIN                    = "login"
+	APPVIEWX_GET_ACCESS_TOKEN_ACTION_ID         = "acctmgmt-get-service-token"
+	APPVIEWX_REGENERATE_CLIENT_SECRET_ACTION_ID = "acctmgmt-regenerate-client-secret"
+	CLIENT_SECRET_RESPONSE_KEY                  = "clientSecret"
+	APPVIEWX_TFVARS_FILE_PATH                   = "appviewx_tfvars_file_path"
 
 	POST   = "POST"
 	PUT    = "PUT"
@@ -66,6 +69,9 @@ const (
 	KEY_DOWNLOAD_PATH               = "key_download_path"
 	KEY_DOWNLOAD_PASSWORD           = "key_download_password"
 	DOWNLOAD_PASSWORD_PROTECTED_KEY = "download_password_protected_key"
+	STORE_CERTIFICATE_IN_STATE      = "store_certificate_in_state"
+	CERTIFICATE_CONTENT             = "certificate_content"
+	KEY_CONTENT                     = "key_content"
 
 	REQUEST_DATA                = "request_data"
 	SEQUENCE_NO                 = "sequence_number"
@@ -85,5 +91,5 @@ const (
 	APACHE_CERTIFICATE_LOCATION = "apache_certificate_location"
 	APACHE_KEY_LOCATION         = "apache_key_location"
 
-	LOG_LEVEL                    = "log_level"
+	LOG_LEVEL = "log_level"
 )

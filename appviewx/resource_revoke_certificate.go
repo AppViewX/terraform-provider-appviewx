@@ -118,7 +118,7 @@ func resourceRevokeCertificateCreate(ctx context.Context, d *schema.ResourceData
 			return diag.FromErr(err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, "WEB", appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, "WEB")
 		if err != nil {
 			logger.Error("❌ Error in getting the access token:")
 			logger.Error("   ", err)

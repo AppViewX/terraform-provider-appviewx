@@ -277,7 +277,7 @@ func resourceSearchCertificateByKeywordCreate(ctx context.Context, d *schema.Res
 			return diag.FromErr(err)
 		}
 	} else if appviewxClientId != "" && appviewxClientSecret != "" {
-		accessToken, err = GetAccessToken(appviewxClientId, appviewxClientSecret, appviewxEnvironmentIP, appviewxEnvironmentPort, appviewxGwSource, appviewxEnvironmentIsHTTPS)
+		accessToken, err = GetAccessTokenWithRotation(configAppViewXEnvironment, appviewxGwSource)
 		if err != nil {
 			logger.Error("❌ Error in getting the access token:")
 			logger.Error("   ", err)
