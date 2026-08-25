@@ -1,5 +1,9 @@
 # terraform-provider-appviewx
 
+## Requirements
+- **Go 1.27 or later** (required for security vulnerability fixes)
+- **Terraform >= 1.0**
+
 ## Build
 ```
 > cd ../terraform-provider-appviewx
