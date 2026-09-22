@@ -114,7 +114,7 @@ Error: no tfvars file configured
 
 === NEW CLIENT SECRET REGENERATED ===
 Client ID: your-client-id
-Client Secret: newly-generated-secret
+Client Secret (base64): newly-generated-secret
 
 Please update your configuration and re-run: terraform apply
 ```
