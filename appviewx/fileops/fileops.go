@@ -1,6 +1,7 @@
 package fileops
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -66,7 +67,7 @@ func UpdateTfVarsClientSecret(filePath, clientID, newSecret string) error {
 		// No tfvars file path provided in provider block
 		// Display regenerated secret prominently for manual configuration
 		displayRegeneratedSecret(clientID, newSecret)
-		return fmt.Errorf("no tfvars file configured\n\n=== NEW CLIENT SECRET REGENERATED ===\nClient ID: %s\nClient Secret: %s\n\nPlease configure one of the following:\n1. Add appviewx_tfvars_file_path to your provider block\n2. Update appviewx_client_secret in your .tf file\n3. Update APPVIEWX_TERRAFORM_CLIENT_SECRET environment variable\n\nThen re-run: terraform apply", clientID, newSecret)
+		return fmt.Errorf("no tfvars file configured\n\n=== NEW CLIENT SECRET REGENERATED ===\nClient ID: %s\nClient Secret (base64): %s\n\nPlease configure one of the following:\n1. Add appviewx_tfvars_file_path to your provider block\n2. Update appviewx_client_secret in your .tf file\n3. Update APPVIEWX_TERRAFORM_CLIENT_SECRET environment variable\n\nThen re-run: terraform apply", clientID, base64.StdEncoding.EncodeToString([]byte(newSecret)))
 	}
 
 	// Check if the file exists
@@ -74,7 +75,7 @@ func UpdateTfVarsClientSecret(filePath, clientID, newSecret string) error {
 		if os.IsNotExist(err) {
 			log.Printf("[WARN] tfvars file specified in appviewx_tfvars_file_path does not exist: %s", filePath)
 			displayRegeneratedSecret(clientID, newSecret)
-			return fmt.Errorf("tfvars file not found: %s\n\nNEW CLIENT SECRET:\nClient ID: %s\nClient Secret: %s\n\nUpdate your configuration and re-run terraform apply.", filePath, clientID, newSecret)
+			return fmt.Errorf("tfvars file not found: %s\n\nNEW CLIENT SECRET:\nClient ID: %s\nClient Secret (base64): %s\n\nUpdate your configuration and re-run terraform apply.", filePath, clientID, base64.StdEncoding.EncodeToString([]byte(newSecret)))
 		}
 		return fmt.Errorf("cannot access tfvars file: %s: %w", filePath, err)
 	}
@@ -94,7 +95,7 @@ func UpdateTfVarsClientSecret(filePath, clientID, newSecret string) error {
 	if updated == string(raw) {
 		log.Printf("[WARN] Key 'appviewx_client_secret' not found in %s", filePath)
 		displayRegeneratedSecret(clientID, newSecret)
-		return fmt.Errorf("key 'appviewx_client_secret' not found in %s\n\nNEW CLIENT SECRET:\nClient ID: %s\nClient Secret: %s\n\nAdd this to your tfvars file and re-run terraform apply.", filePath, clientID, newSecret)
+		return fmt.Errorf("key 'appviewx_client_secret' not found in %s\n\nNEW CLIENT SECRET:\nClient ID: %s\nClient Secret (base64): %s\n\nAdd this to your tfvars file and re-run terraform apply.", filePath, clientID, base64.StdEncoding.EncodeToString([]byte(newSecret)))
 	}
 
 	if err := os.WriteFile(filePath, []byte(updated), 0600); err != nil {
@@ -105,15 +106,17 @@ func UpdateTfVarsClientSecret(filePath, clientID, newSecret string) error {
 	return nil
 }
 
-// displayRegeneratedSecret displays the regenerated secret prominently in logs
+// displayRegeneratedSecret displays the regenerated secret prominently in logs.
+// The secret is base64-encoded to avoid plaintext exposure in log files.
 func displayRegeneratedSecret(clientID, newSecret string) {
+	encoded := base64.StdEncoding.EncodeToString([]byte(newSecret))
 	log.Println("")
 	log.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
 	log.Println("║                    ⚠️  CLIENT SECRET REGENERATED  ⚠️                          ║")
 	log.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 	log.Println("")
-	log.Printf("Client ID:     %s\n", clientID)
-	log.Printf("Client Secret: %s\n", newSecret)
+	log.Printf("Client ID:              %s\n", clientID)
+	log.Printf("Client Secret (base64): %s\n", encoded)
 	log.Println("")
 	log.Println("Update your configuration and re-run: terraform apply")
 	log.Println("")
