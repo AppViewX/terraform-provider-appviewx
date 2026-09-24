@@ -9,12 +9,10 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"terraform-provider-appviewx/appviewx/config"
@@ -224,6 +222,20 @@ func GetDownloadPassword(resourceData *schema.ResourceData, downloadFormat strin
 	return "", true
 }
 
+// getPasswordWithPriority returns password with provider priority over resource
+func getPasswordWithPriority(providerPassword, resourcePassword string) string {
+	if providerPassword != "" {
+		log.Println("[INFO] Using password from provider configuration")
+		return providerPassword
+	}
+	if resourcePassword != "" {
+		log.Println("[INFO] Using password from resource configuration")
+		return resourcePassword
+	}
+	log.Println("[INFO] No password provided at provider or resource level")
+	return ""
+}
+
 // validateAndGetDirectoryPath checks if the directory for the given file path is accessible.
 // Returns the directory path if valid, otherwise returns error details.
 func validateAndGetDirectoryPath(filePath string) (string, error) {
@@ -321,13 +333,20 @@ func downloadCertificateFromAppviewx(appviewxResourceId, commonName, serialNumbe
 
 }
 
-func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) error {
+func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment, storeInState bool) error {
 	commonName := resourceData.Get(constants.COMMON_NAME).(string)
-	downloadPath, err := GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
-	if err != nil {
-		log.Println("[ERROR] Failed to validate key download path: " + err.Error())
-		return err
+	
+	// Only compute download path if we're writing to files
+	var downloadPath string
+	var err error
+	if !storeInState {
+		downloadPath, err = GetDownloadFilePathForKey(resourceData, commonName+"_key", "PEM")
+		if err != nil {
+			log.Println("[ERROR] Failed to validate key download path: " + err.Error())
+			return err
+		}
 	}
+	
 	providerKeyPassword := configAppViewXEnvironment.ProviderKeyDownloadPassword
 	resourceKeyPassword := resourceData.Get(constants.KEY_DOWNLOAD_PASSWORD).(string)
 	downloadPassword := getPasswordWithPriority(providerKeyPassword, resourceKeyPassword)
@@ -345,12 +364,25 @@ func downloadKey(resourceData *schema.ResourceData, resourceID, appviewxSessionI
 	}
 	uuid := searchResponse.AppviewxResponse.ResponseObject.Objects[0].UUID
 	log.Println("[INFO] UUID for the resource id " + resourceID + " was obtained successfully")
-	if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
-		log.Println("[INFO] Private key downloaded successfully in the specified path")
-		resourceData.SetId(strconv.Itoa(rand.Int()))
+	
+	// Handle key download based on storeInState flag
+	if storeInState {
+		// Fetch key content and store in state
+		keyContent, success, errMsg := downloadKeyContentFromAppviewx(uuid, downloadPassword, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment)
+		if !success {
+			log.Println("[ERROR] Private key download failed: " + errMsg)
+			return errors.New("[ERROR] Private key was not downloaded: " + errMsg)
+		}
+		resourceData.Set(constants.KEY_CONTENT, keyContent)
+		log.Println("[INFO] Private key content stored in Terraform state")
 	} else {
-		log.Println("[ERROR] Private key was not downloaded in the specified path")
-		return errors.New("[ERROR] Private key was not downloaded in the specified path")
+		// Use existing file-based behavior
+		if downloadSuccess := downloadKeyFromAppviewx(uuid, downloadPassword, downloadPath, downloadPasswordProtectedKey, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+			log.Println("[INFO] Private key downloaded successfully in the specified path")
+		} else {
+			log.Println("[ERROR] Private key was not downloaded in the specified path")
+			return errors.New("[ERROR] Private key was not downloaded in the specified path")
+		}
 	}
 	return nil
 }

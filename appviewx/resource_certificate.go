@@ -125,6 +125,20 @@ func ResourceCertificateServer() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+			constants.STORE_CERTIFICATE_IN_STATE: &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+			constants.CERTIFICATE_CONTENT: &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			constants.KEY_CONTENT: &schema.Schema{
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
+			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: resourceCertificateImport,
@@ -213,12 +227,13 @@ func resourceCertificateServerCreate(resourceData *schema.ResourceData, m interf
 		return nil
 	} else {
 		log.Println("[INFO] Certificate is created in SYNC mode so proceeding with download.")
-		if err := downloadCertificate(resourceData, resourceID, appviewxSessionID, accessToken, configAppViewXEnvironment); err != nil {
+		storeInState := resourceData.Get(constants.STORE_CERTIFICATE_IN_STATE).(bool)
+		if err := downloadCertificate(resourceData, resourceID, appviewxSessionID, accessToken, configAppViewXEnvironment, storeInState); err != nil {
 			return err
 		}
-		if resourceData.Get(constants.KEY_DOWNLOAD_PATH).(string) != "" {
-			log.Println("[INFO] Key download path is provided in the payload hence proceeding with key download")
-			if err := downloadKey(resourceData, resourceID, appviewxSessionID, accessToken, configAppViewXEnvironment); err != nil {
+		if resourceData.Get(constants.KEY_DOWNLOAD_PATH).(string) != "" || storeInState {
+			log.Println("[INFO] Key download path is provided in the payload or state storage is enabled, hence proceeding with key download")
+			if err := downloadKey(resourceData, resourceID, appviewxSessionID, accessToken, configAppViewXEnvironment, storeInState); err != nil {
 				return err
 			}
 		}
@@ -226,28 +241,47 @@ func resourceCertificateServerCreate(resourceData *schema.ResourceData, m interf
 	return nil
 }
 
-func downloadCertificate(resourceData *schema.ResourceData, resourceID string, appviewxSessionID string, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment) error {
+func downloadCertificate(resourceData *schema.ResourceData, resourceID string, appviewxSessionID string, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment, storeInState bool) error {
 	var isChainRequired, ok bool
 	var downloadPassword string
 	commonName := resourceData.Get(constants.COMMON_NAME).(string)
 
 	downloadFormat := GetDownloadFormat(resourceData)
-	downloadPath, err := GetDownloadFilePath(resourceData, commonName, downloadFormat)
-	if err != nil {
-		log.Println("[ERROR] Failed to validate certificate download path: " + err.Error())
-		return err
+	
+	// Only compute download path if we're writing to files
+	var downloadPath string
+	var err error
+	if !storeInState {
+		downloadPath, err = GetDownloadFilePath(resourceData, commonName, downloadFormat)
+		if err != nil {
+			log.Println("[ERROR] Failed to validate certificate download path: " + err.Error())
+			return err
+		}
 	}
+	
 	if downloadPassword, ok = GetDownloadPassword(resourceData, downloadFormat, configAppViewXEnvironment); !ok {
 		return errors.New("[ERROR] Error in getting the download password")
 	}
 	isChainRequired = resourceData.Get(constants.CERTIFICATE_CHAIN_REQUIRED).(bool)
 
-	if downloadSuccess := downloadCertificateFromAppviewx(resourceID, "", "", downloadFormat, downloadPassword, downloadPath, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
-		log.Println("[INFO] Certificate downloaded successfully in the specified path")
-		resourceData.SetId(strconv.Itoa(rand.Int()))
+	// Handle certificate download based on storeInState flag
+	if storeInState {
+		// Fetch certificate content and store in state
+		certContent, success, errMsg := downloadCertificateContentFromAppviewx(resourceID, "", "", downloadFormat, downloadPassword, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment)
+		if !success {
+			log.Println("[ERROR] Certificate download failed: " + errMsg)
+			return errors.New("[ERROR] Certificate was not downloaded: " + errMsg)
+		}
+		resourceData.Set(constants.CERTIFICATE_CONTENT, certContent)
+		log.Println("[INFO] Certificate content stored in Terraform state")
 	} else {
-		log.Println("[ERROR] Certificate was not downloaded in the specified path")
-		return errors.New("[ERROR] Certificate was not downloaded in the specified path")
+		// Use existing file-based behavior
+		if downloadSuccess := downloadCertificateFromAppviewx(resourceID, "", "", downloadFormat, downloadPassword, downloadPath, isChainRequired, appviewxSessionID, accessToken, configAppViewXEnvironment); downloadSuccess {
+			log.Println("[INFO] Certificate downloaded successfully in the specified path")
+		} else {
+			log.Println("[ERROR] Certificate was not downloaded in the specified path")
+			return errors.New("[ERROR] Certificate was not downloaded in the specified path")
+		}
 	}
 	return nil
 }

@@ -14,17 +14,21 @@ The `appviewx_create_certificate` resource follows a structured flow to create a
    - If `is_sync` is set to `true`, the certificate is created in synchronous mode, and the certificate is downloaded immediately after creation.
    - If `is_sync` is set to `false`, the certificate is created in asynchronous mode, and the resource ID is returned for later use in downloading the certificate. Users can also use `common_name` and `serial_number` for downloading the certificate later.
 
-4. **Custom and Vendor-Specific Fields**:
+4. **Certificate Download Options**:
+   - By default, certificates and private keys are downloaded to specified file paths (`certificate_download_path`, `key_download_path`).
+   - Alternatively, when `store_certificate_in_state` is enabled, the certificate and private key content are stored directly in the Terraform state instead of being written to the filesystem, providing better integration with other Terraform resources.
+
+5. **Custom and Vendor-Specific Fields**:
    - The resource supports adding custom fields (`custom_fields`) and vendor-specific fields (`vendor_specific_fields`) to include additional metadata or configurations required by the Certificate Authority.
 
-5. **Certificate Grouping**:
+6. **Certificate Grouping**:
    - Certificates can be grouped using the `certificate_group_name` attribute, where the certificates will be placed in AppViewX Certificate Inventory.
 
-6. **Certificate Download**:
+7. **Certificate Download**:
    - The certificate can be downloaded to a specified path using the `certificate_download_path` attribute. The format of the downloaded certificate is defined by `certificate_download_format`.
    - If `certificate_chain_required` is set to `true`, the certificate chain is included in the download.
 
-7. **Private Key Download**:
+8. **Private Key Download**:
    - If `key_download_path` is specified, the private key associated with the certificate is downloaded to the given path. The key can be password-protected using the `key_download_password` attribute.
 
 
@@ -65,15 +69,24 @@ The `appviewx_create_certificate` resource supports the following attributes:
 - **`key_download_path`** (string): The file path to download the private key seperately.
 - **`key_download_password`** (string): The password for the downloaded private key. This is required to download the private key from AppViewX and by default the key is password protected from AppViewX.
 - **`download_password_protected_key`** (boolean): To specify whether the private key should be downloaded as password-protected or plain private key. If this is enabled then the password protected key is downloaded as such, but if this is disabled then the password protected key is decrypted using the provided password using openssl and saved in the specified path automatically.
-> **Note**: This Key download is optional and can be ignored if the certificate download format specified is P12 or PFX.
+- **`store_certificate_in_state`** (boolean): When enabled, stores the certificate and private key content directly in the Terraform state instead of writing them to the filesystem. Default: `false`. **This option only works in synchronous mode (`is_sync = true`)** because in asynchronous mode, the certificate has not yet been issued and there is nothing to download. In async mode, use the `appviewx_download_certificate` resource later after the certificate is issued.
+
+> **Note**: Private key download is optional and can be ignored if the certificate download format specified is P12 or PFX.
+
+### Computed Attributes
+
+The following attributes are populated only when **`store_certificate_in_state = true` AND `is_sync = true`** (synchronous mode with state storage enabled):
+
+- **`certificate_content`** (string): The complete PEM-formatted certificate content, including the `BEGIN CERTIFICATE` and `END CERTIFICATE` headers.
+- **`key_content`** (string, sensitive): The complete PEM-formatted private key content. This attribute is marked as **sensitive** and is hidden from Terraform plan and apply output.
 
 
 ## Example Usage
 
-### Certificate Creation In Synchronous Mode
+### Certificate Creation In Synchronous Mode with File-Based Download
 ```hcl
 resource "appviewx_create_certificate" "createcert" {
-   common_name                = "sampe.example.com"
+   common_name                = "sample.example.com"
    hash_function              = "SHA256"
    key_type                   = "RSA"
    bit_length                 = "2048"
@@ -92,6 +105,30 @@ resource "appviewx_create_certificate" "createcert" {
    key_download_path          = "/path/to/directory"
    key_download_password      = "password"
    download_password_protected_key = false
+   is_sync                    = true
+}
+```
+
+### Certificate Creation In Synchronous Mode with State Storage
+```hcl
+resource "appviewx_create_certificate" "createcert" {
+   common_name                = "sample.example.com"
+   hash_function              = "SHA256"
+   key_type                   = "RSA"
+   bit_length                 = "2048"
+   certificate_authority      = "Certificate Authority"
+   ca_setting_name            = "CA Setting Name"
+   certificate_type           = "EliteSSL Certificate"
+   dns_names                  = ["example.com", "example123.com"]
+   custom_fields              = { "field_name1" = "value1", "field_name2" = "value2" }
+   vendor_specific_fields     = { "field_name" = "value", "field_name2" = "value2" }
+   validity_unit              = "years"
+   validity_unit_value        = 2
+   certificate_group_name     = "AppViewX Certificate Group Name"
+   certificate_download_format = "PEM"
+   certificate_chain_required = true
+   key_download_password      = "password"
+   store_certificate_in_state = true
    is_sync                    = true
 }
 ```
@@ -136,6 +173,8 @@ resource "appviewx_download_certificate" "downloadcert" {
 > **NOTE** Here the `resource_id` field will be propagated in the terraform functionality in the backend so it might not be seen anywhere in the input field in create certificate resource.
 
 > **NOTE** In Asynchronous mode the certificate issuance status will not be checked, and there are no rety mechanisms available.
+
+> **NOTE** When `store_certificate_in_state = true`, no certificate or private key files are created on the local filesystem. The certificate content is stored in the Terraform state, and `key_content` is treated as a sensitive attribute.
 
 ## Import
 

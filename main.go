@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	version     = "1.1.0"
-	releaseDate = "Aug, 2026"
-	description = "Terraform Certificate Persistance in statefile based on the flag and the Service account rotation if expired"
+	version     = "1.1.2"
+	releaseDate = "Sep, 2026"
+	description = "Certificate/Key State Storage for Certificate Create Resource (Synchronous Mode)"
 )
 
 func init() {

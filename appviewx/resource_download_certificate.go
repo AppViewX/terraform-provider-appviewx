@@ -201,20 +201,6 @@ func resourceDownloadCertificate(resourceData *schema.ResourceData, m interface{
 	return nil
 }
 
-// getPasswordWithPriority returns password with provider priority over resource
-func getPasswordWithPriority(providerPassword, resourcePassword string) string {
-	if providerPassword != "" {
-		log.Println("[INFO] Using password from provider configuration")
-		return providerPassword
-	}
-	if resourcePassword != "" {
-		log.Println("[INFO] Using password from resource configuration")
-		return resourcePassword
-	}
-	log.Println("[INFO] No password provided at provider or resource level")
-	return ""
-}
-
 // downloadKeyWithPriority downloads key using provider-level password priority
 // When storeInState is true, stores the key content in Terraform state instead of writing to file
 func downloadKeyWithPriority(resourceData *schema.ResourceData, commonName, serialNumber, resourceID, appviewxSessionID, accessToken string, configAppViewXEnvironment *config.AppViewXEnvironment, storeInState bool) error {
